@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {cpToWinProbability,classify,moveAccuracy,whiteScore,perspectiveCp} from '../../dist/assets/core/eval/math.js';
+test('sigmoid symmetric and centered',()=>{assert.equal(cpToWinProbability(0),50);for(const cp of [1,100,500,2000])assert.ok(Math.abs(cpToWinProbability(cp)+cpToWinProbability(-cp)-100)<1e-9)});
+test('classification includes exact upper interval endpoints',()=>{const cases=[[0,'Best'],[1.5,'Best'],[1.50001,'Excellent'],[4,'Excellent'],[4.01,'Good'],[8,'Good'],[8.01,'Inaccuracy'],[14,'Inaccuracy'],[14.01,'Mistake'],[24,'Mistake'],[24.01,'Blunder']];for(const [loss,expected] of cases)assert.equal(classify(loss),expected)});
+test('accuracy clipped and monotone',()=>{assert.ok(moveAccuracy(0)>99.9);assert.ok(moveAccuracy(6)<moveAccuracy(1));assert.equal(moveAccuracy(1000),0)});
+test('UCI score normalization fixes side-to-move sign',()=>{assert.equal(whiteScore({kind:'cp',value:240,perspective:'w'}),240);assert.equal(whiteScore({kind:'cp',value:240,perspective:'b'}),-240);assert.equal(whiteScore({kind:'mate',moves:3,perspective:'b'}),-9970);assert.equal(whiteScore({kind:'mate',moves:-2,perspective:'b'}),9980);assert.equal(perspectiveCp(-120,'b'),120)})

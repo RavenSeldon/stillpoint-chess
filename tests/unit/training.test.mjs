@@ -1,0 +1,10 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {freshSrs,review,due} from '../../dist/assets/core/srs/scheduler.js';
+import {shortestKnightPath,validateKnightPath,squareIsLight} from '../../dist/assets/core/eval/knight.js';
+import {freshState,validateSave} from '../../dist/assets/core/storage/db.js';
+import {search} from '../../dist/assets/core/engine/search.js';
+import {Chess,INITIAL_FEN} from '../../dist/assets/core/chess/Chess.js';
+test('SM-2 interval progression and lapse reset',()=>{let s=freshSrs();for(const days of [1,3,7,14,30]){s=review(s,true,0);assert.equal(s.intervalDays,days)}assert.equal(s.correctCount,5);assert.equal(due(s,0),false);s=review(s,false,0);assert.equal(s.intervalDays,1);assert.equal(s.lapseCount,1);assert.ok(s.easeFactor>=1.3)});
+test('knight BFS exact path and square parity',()=>{const path=shortestKnightPath('b1','f6');assert.equal(path.length-1,3);assert.ok(validateKnightPath(path,'b1','f6'));assert.equal(shortestKnightPath('a1','a1').length-1,0);assert.equal(squareIsLight('a1'),false);assert.equal(squareIsLight('a2'),true);assert.equal(squareIsLight('h8'),false)});
+test('backup validation accepts real schema and rejects invalid',()=>{const st=freshState();assert.deepEqual(validateSave(st),st);assert.throws(()=>validateSave({version:1,games:[]}));assert.throws(()=>validateSave({...st,version:99}));assert.throws(()=>validateSave({...st,blunders:[{id:'bad',fen:'invalid'}]}));assert.throws(()=>validateSave({...st,stats:{...st.stats,coordinateBest:-1}}))});
+test('offline minimax produces a legal chess move at depth 2',()=>{const a=search(INITIAL_FEN,2,2000);assert.equal(typeof a.bestMove,'string');const g=new Chess();assert.doesNotThrow(()=>g.move(a.bestMove));assert.ok(a.nodes>20)});
