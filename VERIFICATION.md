@@ -11,19 +11,21 @@
 
 | Check | Outcome |
 |---|---|
-| `npm run build` | PASS — strict TypeScript, Vite production bundle, generated service worker, 39 local assets precached |
-| `npm run test:unit` | PASS — 25 passed, 0 failed; includes initial perft 20/400/8902, chess rules, PGN export/reimport, data continuity, evaluation/mate parsing, SRS, knight BFS, backup validation |
-| `npm run test:static` | PASS — all 39 assets, Stockfish WASM, manifest, and icons served beneath `/sample-repository/` |
-| `npm run test:e2e` | PASS — 5 Chromium tests passed, 0 failed/skipped |
+| `npm run build` | PASS — strict TypeScript, Vite production bundle, generated service worker, 40 local assets precached |
+| `npm run test:unit` | PASS — 31 passed, 0 failed; includes initial perft 20/400/8902, chess rules, PGN export/reimport, data continuity, evaluation/mate parsing, SRS, knight BFS, backup validation, adaptive learning, and theme migration |
+| `npm run test:static` | PASS — all 40 assets, Stockfish WASM, manifest, and icons served beneath `/sample-repository/` |
+| `npm run test:e2e` | PASS — 7 Chromium tests passed, 0 failed/skipped |
 | Real engine game and coach review | PASS — legal user move, real Stockfish reply, two move records, and review UI observed in Chromium |
 | Direct UCI worker check | PASS — `uci`/`uciok` and a legal `bestmove` from the bundled worker |
 | Mobile training flow | PASS at 390 × 844 — Opening Dojo, Visualization, feedback, and no main-content horizontal overflow |
+| Learning Path flow | PASS — two real Visualization attempts appeared in the activity trail; readiness updated; the recommendation opened the intended exercise |
+| Four-theme flow | PASS — Indigo Focus, Lavender Paper, Forest Quiet, and Ember Study produced distinct backgrounds; Ember Study persisted after reload |
 | Piece artwork and visibility modes | PASS — 32 local SVGs loaded; Ghost remained at 25% opacity; Discs and Full blindfold changed rendering as intended; accessible square labels and Standard mode remained intact |
 | Offline production reentry | PASS — service worker cached WASM and artwork; after offline reload, 32 visible/loaded SVG pieces, training, and Stockfish reply still worked |
 | PGN regression | PASS — exported result is not duplicated and the exported game round-trips to the same final FEN |
-| Visual inspection | PASS at 1440 × 1000 desktop and 390 × 844 mobile viewports; dark, light, and Visualization production screenshots inspected after applying the indigo/lavender/teal/pink/gold palette |
+| Visual inspection | PASS at 1440 × 1000 desktop and 390 × 844 mobile viewports; Learning Path inspected in all four palettes, with no horizontal overflow or page errors; final single-skill presentation rechecked after correction |
 
-The complete `npm run verify` sequence was executed successfully. Browser tests ran against the production build through Vite preview. The production bundle is approximately 2.5 MB, dominated by the locally cached Stockfish WASM asset.
+The complete `npm run verify` sequence was executed successfully. Browser tests ran against the production build through Vite preview. The production bundle is approximately 2.6 MB, dominated by the locally cached Stockfish WASM asset.
 
 ## Important corrections made in this release
 
@@ -34,6 +36,9 @@ The complete `npm run verify` sequence was executed successfully. Browser tests 
 - Added review turning points, estimated mean move accuracy, evaluation trace, critical-position practice, and Blunder Bank deduplication.
 - Added Chromium installation handling, visible online/offline readiness, local license texts, and a GitHub Pages Actions workflow.
 - Refreshed the visual hierarchy, board palette, controls, and responsive navigation; replaced platform-dependent chess glyphs with locally bundled scalable Cburnett SVG artwork and preserved all visibility modes.
+- Added an explainable Learning Path using timestamped attempts, game results, opening recall, blunder repair, visualization, calculation, endgames, and master study; recommendations link directly to existing exercises.
+- Added four persistent full-interface themes with migration from legacy light/dark preferences, plus validated backup merge/deduplication for learning events.
+- Prevented a single informed skill from being labelled simultaneously as both a strength and a growth edge.
 - Fixed a PGN export defect discovered during the final audit: the result had been appended twice, preventing reimport.
 
 ## Not verified or intentionally not claimed

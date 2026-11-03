@@ -25,7 +25,9 @@ The deployable static site is generated in `dist/`. Do not open it through `file
 ## What is included
 
 - **Play:** tap, drag, SAN, or UCI input; White, Black, or random side; custom FEN/PGN; untimed and timed practice; takeback in untimed games; draw claims; resignation; board flip; blindfold visibility levels; PGN export.
-- **Modern visual system:** locally bundled scalable Cburnett SVG pieces, an indigo/lavender board, teal primary actions, pink selection/capture states, gold last-move highlights, refined controls, and responsive desktop/mobile navigation.
+- **Learning Path:** four actionable recommendations, seven practice-readiness signals, relative strengths and growth edges, recent trends, evidence labels, and an activity trail. Every recommendation opens a real local exercise.
+- **Four complete themes:** Indigo Focus, Lavender Paper, Forest Quiet, and Ember Study, each with coordinated navigation, panels, controls, and board colors. Legacy light/dark preferences migrate automatically.
+- **Modern visual system:** locally bundled scalable Cburnett SVG pieces, clear selection/capture states, last-move highlights, refined controls, and responsive desktop/mobile navigation.
 - **Real local engine:** Stockfish 19 Lite, single-threaded JS/WASM, running in a Web Worker. Six bounded difficulty tiers are descriptive presets, not calibrated Elo ratings.
 - **Coach and review:** pre-/post-move Stockfish comparison, mover-perspective normalization, typed mate scores, estimated win-probability loss, move classifications, preferred-move arrows, an evaluation trace for reviewed moves, and practice from the largest turning points.
 - **Opening Dojo:** six legal starter lines with selected alternatives, walkthroughs, recall drills, and persistent spaced repetition.
@@ -33,7 +35,7 @@ The deployable static site is generated in `dist/`. Do not open it through `file
 - **Endgames:** five legal positions with concrete practice objectives. They are not represented as tablebase-certified adjudicators.
 - **Blunder Bank:** three starter mate-in-one examples plus deduplicated positions captured from completed coach analysis.
 - **Classical Masters:** five complete, legally replayable historical scores with original notes and Guess the Move.
-- **Data ownership:** IndexedDB persistence, versioned JSON backup, validated merge/overwrite import, PGN export, and two-step data reset.
+- **Data ownership:** IndexedDB persistence, timestamped learning history, versioned JSON backup, deduplicated merge/validated overwrite import, PGN export, and two-step data reset.
 - **PWA:** manifest, icons, standalone display, Chromium install prompt support, versioned service-worker cache, and locally bundled runtime assets.
 
 ## Offline and mobile installation
@@ -65,10 +67,10 @@ Vite uses `base: './'`, and runtime engine, manifest, icon, and service-worker r
 ## Verification
 
 ```sh
-npm run test:unit    # production build plus chess, data, evaluation, UCI, SRS, and backup tests
+npm run test:unit    # production build plus chess, learning, themes, evaluation, SRS, and backup tests
 npm run test:static  # requires Python 3; checks subpath asset and manifest delivery
 npx playwright install chromium
-npm run test:e2e     # real Chromium play, UCI worker, mobile flow, and offline reload
+npm run test:e2e     # Chromium play, adaptive path, themes, mobile flow, and offline reload
 ```
 
 Or run the complete sequence:
@@ -81,6 +83,7 @@ Browser tests exercise the production build, not only the development server. Se
 
 ## Scope and limitations
 
+- Learning Path scores are explainable practice-readiness heuristics based on local outcomes, recency, and a neutral prior. They are not Elo estimates, diagnoses, or predictions; sparse histories remain explicitly low-confidence.
 - The Opening Dojo is a starter repertoire, not an exhaustive opening tree.
 - “Visualize the Sequence” currently trains legal opening recall; its positions are not advertised as uniquely verified tactical puzzles.
 - Endgame drills use actual outcomes and stated practice goals, not theoretical WDL labels or tablebase adjudication.
@@ -95,9 +98,10 @@ Browser tests exercise the production build, not only the development server. Se
 - `src/core/chess/Chess.ts`: small compatibility facade over pinned `chess.js` 1.4.0.
 - `src/core/engine/adapter.ts`: queued UCI protocol, cancellation, typed scores, worker lifecycle, and bounded strength presets.
 - `public/engine/`: unmodified Stockfish.js 19.0.1 Lite single-threaded browser assets and license.
-- `src/core/eval`, `src/core/srs`, `src/core/storage`: evaluation math, memory schedule, and local persistence.
+- `src/core/learning/engine.ts`: local evidence aggregation, recency weighting, readiness, trends, and actionable recommendations.
+- `src/core/eval`, `src/core/srs`, `src/core/storage`: evaluation math, memory schedule, learning-history validation, and local persistence.
 - `src/data`: opening, calculation, endgame, and classical-game content with legality tests.
-- `src/ui`: accessible custom board and training views.
+- `src/ui`: accessible custom board, Learning Path, training views, and four persistent themes.
 - `scripts/package.mjs`: content-hashed, release-versioned offline precache generation.
 
 No account, analytics, remote chess API, runtime CDN, or third-party cookie is used. Normal requests to the static host still occur when online.

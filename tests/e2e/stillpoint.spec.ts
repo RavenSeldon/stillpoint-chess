@@ -101,3 +101,44 @@ test("production app, engine, and training reload while offline", async ({ page,
   await expect(page.getByRole("heading", { name: "Visualization Gym" })).toBeVisible();
   await context.setOffline(false);
 });
+
+test("learning path records practice and opens an adaptive recommendation", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Visualization" }).click();
+  await page.getByRole("button", { name: "Square Color" }).click();
+  await page.getByRole("button", { name: "Dark square" }).click();
+  await page.getByRole("button", { name: "Dark square" }).click();
+  await expect(page.locator(".mental-result")).toContainText("a1 is dark");
+
+  await page.getByRole("button", { name: "Learning Path" }).click();
+  await expect(page.getByRole("heading", { name: "Practice what matters next" })).toBeVisible();
+  await expect(page.locator(".path-intro .metrics > div").first()).toContainText("2");
+  await expect(page.locator(".activity-row")).toHaveCount(2);
+  await expect(page.locator(".activity-row").first()).toContainText("color:a1");
+  await expect(page.locator(".skill-row").filter({ hasText: "Visualization" })).toContainText("Strength");
+  await page.getByRole("button", { name: "Open visualization" }).click();
+  await expect(page.getByRole("heading", { name: "Visualization Gym" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("all four colour themes are distinct and persist after reload", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  const select = page.locator("#theme-select");
+  await expect(select.locator("option")).toHaveCount(4);
+  const backgrounds = new Set<string>();
+  for (const theme of ["indigo", "paper", "forest", "ember"]) {
+    await select.selectOption(theme);
+    await expect(page.locator("body")).toHaveAttribute("data-theme", theme);
+    await expect(select).toHaveValue(theme);
+    backgrounds.add(await page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor));
+  }
+  expect(backgrounds.size).toBe(4);
+  await page.reload();
+  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-theme", "ember");
+  await expect(page.locator("#theme-select")).toHaveValue("ember");
+  await page.locator("#theme-select").selectOption("indigo");
+});

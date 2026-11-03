@@ -21,8 +21,11 @@ import {
   validateSave,
   type SaveState,
   type Blunder,
+  type LearningArea,
+  type Theme,
 } from "../core/storage/db.js";
 import { freshSrs, due, review } from "../core/srs/scheduler.js";
+import { buildLearningProfile, type Recommendation } from "../core/learning/engine.js";
 import {
   openings,
   masters,
@@ -59,6 +62,7 @@ function parseTime(value: string) {
   return { remaining: [minutes * 60, minutes * 60], inc };
 }
 const nav = [
+  ["path", "Learning Path", "✦"],
   ["play", "Play", "♞"],
   ["openings", "Opening Dojo", "◇"],
   ["visualize", "Visualization", "◎"],
@@ -67,6 +71,12 @@ const nav = [
   ["masters", "Master Games", "♛"],
   ["settings", "Data & Privacy", "⚙"],
 ] as const;
+const themeColors: Record<Theme, string> = {
+  indigo: "#0c0d2b",
+  paper: "#f1f0ed",
+  forest: "#101b18",
+  ember: "#f6ead9",
+};
 
 type ReviewEntry = {
   ply: number;
@@ -243,6 +253,17 @@ export class App {
   private saveSoon() {
     this.save().catch((e) => this.announce("Storage error: " + e.message));
   }
+  private recordLearning(area: LearningArea, correct: boolean, key: string) {
+    this.state.learning.unshift({
+      id: crypto.randomUUID(),
+      area,
+      correct,
+      key,
+      timestamp: Date.now(),
+    });
+    this.state.learning = this.state.learning.slice(0, 2000);
+    this.saveSoon();
+  }
   private bind(id: string, fun: () => void) {
     const el = $(id);
     if (el) el.addEventListener("click", fun);
@@ -317,6 +338,7 @@ export class App {
   }
   private render() {
     document.body.dataset.theme = this.state.settings.theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColors[this.state.settings.theme]);
     const active = nav.find((n) => n[0] === this.view);
     this.root.innerHTML = `<div class="app-shell"><aside class="navigation"><div class="brand"><div class="brand-symbol">♔</div><div><div class="brand-title">STILLPOINT</div><div class="brand-subtitle">A CHESS PRACTICE</div></div></div><div class="nav-caption">YOUR PRACTICE</div><nav aria-label="Main navigation">${nav.map(([id, label, glyph]) => `<button class="nav-link ${id === this.view ? "active" : ""}" data-view="${id}" type="button" ${id === this.view ? 'aria-current="page"' : ""}><span class="nav-glyph">${glyph}</span>${label}</button>`).join("")}</nav><div class="nav-bottom"><div class="practice-line">道 · 愛 · 不二</div><small>Truth on the board.<br>Progress stays on this device.</small></div></aside><main id="main-content" class="main-content">${this.renderMain()}</main><div id="live" class="sr-only" aria-live="polite" aria-atomic="true">${esc(this.announcements)}</div></div>`;
     document
@@ -325,6 +347,9 @@ export class App {
         b.addEventListener("click", () => this.switchView(b.dataset.view!)),
       );
     switch (this.view) {
+      case "path":
+        this.wirePath();
+        break;
       case "play":
         this.wirePlay();
         break;
@@ -350,6 +375,8 @@ export class App {
   }
   private renderMain() {
     switch (this.view) {
+      case "path":
+        return this.pathHtml();
       case "play":
         return this.playHtml();
       case "openings":
@@ -385,6 +412,63 @@ export class App {
       arrow: this.lastArrow,
       ...options,
     });
+  }
+  private pathHtml() {
+    const profile = buildLearningProfile(this.state);
+    const insight = profile.growthEdge
+      ? `<b>Growth edge:</b> ${esc(profile.growthEdge.label)}. <b>Relative strength:</b> ${esc(profile.strongest?.label || "Still emerging")}. These are practice signals from your local history, not ratings or fixed traits.`
+      : profile.strongest
+        ? `<b>Emerging strength:</b> ${esc(profile.strongest.label)}. Practice other areas to build a broader, more useful baseline.`
+        : "Complete a few activities to establish a baseline. Stillpoint will keep recommendations varied until enough evidence exists.";
+    const recommendations = profile.recommendations.map((recommendation, index) => `<article class="recommendation-card"><span class="recommendation-number">0${index + 1}</span><div><h3>${esc(recommendation.title)}</h3><p>${esc(recommendation.reason)}</p></div><button class="btn ${index === 0 ? "primary" : ""}" type="button" data-recommendation="${index}">${esc(recommendation.action)}</button></article>`).join("");
+    const skills = profile.skills.map((skill) => `<div class="skill-row"><div class="skill-heading"><span>${esc(skill.label)}</span><b>${skill.score}</b></div><meter min="0" max="100" value="${skill.score}" aria-label="${esc(skill.label)} practice readiness">${skill.score}%</meter><small>${skill.status} · ${skill.evidence} evidence${skill.recentChange === null ? "" : ` · recent ${skill.recentChange > 0 ? "+" : ""}${skill.recentChange} pp`}</small></div>`).join("");
+    const recent = [...this.state.learning].sort((a, b) => b.timestamp - a.timestamp).slice(0, 6);
+    const activity = recent.length ? recent.map((attempt) => {
+      const age = Math.max(0, Date.now() - attempt.timestamp);
+      const when = age < 60_000 ? "just now" : age < 3_600_000 ? `${Math.floor(age / 60_000)} min ago` : age < 86_400_000 ? `${Math.floor(age / 3_600_000)} hr ago` : `${Math.floor(age / 86_400_000)} d ago`;
+      const skill = profile.skills.find((item) => item.id === attempt.area)!;
+      return `<div class="activity-row"><span><b>${esc(skill.label)}</b><small>${esc(attempt.key)}</small></span><span class="activity-result ${attempt.correct ? "positive" : ""}">${attempt.correct ? "Completed" : "Review"} · ${when}</span></div>`;
+    }).join("") : `<p class="helper">Your completed exercises will appear here. Nothing leaves this device.</p>`;
+    return `<div class="workspace-heading"><div><span class="overline">YOUR LEARNING PATH</span><h1>Practice what matters next</h1><p>A changing plan shaped by your games, recall, mistakes, and training history.</p></div><span class="current-mode">LOCAL & EXPLAINABLE <span class="status-dot"></span></span></div>
+      <div class="path-overview"><section class="panel path-intro"><span class="overline">A LIVING PRACTICE</span><h2>${profile.recordedAttempts ? "Your path is adapting" : "Begin with a gentle baseline"}</h2><p>${insight}</p><div class="metrics wide"><div><b>${profile.recentAttempts}</b><small>Attempts · 7 days</small></div><div><b>${this.state.games.filter((game) => !game.mode || game.mode === "play").length}</b><small>Practice games</small></div><div><b>${Object.values(this.state.srs).filter((item) => due(item)).length}</b><small>Lines due</small></div></div></section>
+      <section class="panel"><span class="overline">HOW TO READ THIS</span><h2>Signals, not judgments</h2><p>Readiness combines observed outcomes, recency, and a small neutral prior. Confidence grows with evidence. It is not Elo, a diagnosis, or a prediction of your potential.</p><p class="helper">Recommendations always open the existing local exercises; no account or remote analysis is used.</p></section></div>
+      <div class="learning-grid"><section class="panel"><span class="overline">RECOMMENDED NEXT</span><h2>Your next four steps</h2><div class="recommendation-list">${recommendations}</div></section><section class="panel"><span class="overline">PRACTICE PROFILE</span><h2>Strengths & growth edges</h2><div class="skill-list">${skills}</div></section></div>
+      <section class="panel activity-panel"><span class="overline">RECENT LEARNING</span><h2>Your practice trail</h2>${activity}</section>`;
+  }
+  private wirePath() {
+    const profile = buildLearningProfile(this.state);
+    document.querySelectorAll<HTMLButtonElement>("[data-recommendation]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const recommendation = profile.recommendations[Number(button.dataset.recommendation)];
+        if (recommendation) this.openRecommendation(recommendation);
+      });
+    });
+  }
+  private openRecommendation(recommendation: Recommendation) {
+    if (recommendation.area === "openings") {
+      if (recommendation.key && openings.some((opening) => opening.id === recommendation.key)) this.openingId = recommendation.key;
+      this.openingMode = "drill";
+      this.openingIndex = 0;
+      this.openingCorrect = 0;
+      this.openingErrors = 0;
+      this.openingRecorded = false;
+    } else if (recommendation.area === "visualization" || recommendation.area === "calculation") {
+      if (recommendation.mode && ["coordinates", "color", "knight", "calculation"].includes(recommendation.mode)) this.gym = recommendation.mode as typeof this.gym;
+      this.stopGymInterval();
+      this.sprintStarted = false;
+    } else if (recommendation.area === "tactics") {
+      if (recommendation.key && this.state.blunders.some((blunder) => blunder.id === recommendation.key)) this.blunderId = recommendation.key;
+      this.blunderFeedback = "";
+    } else if (recommendation.area === "endgames") {
+      if (recommendation.key && endgames.some((endgame) => endgame.id === recommendation.key)) this.endgameId = recommendation.key;
+      this.playMode = "play";
+    } else if (recommendation.area === "study") {
+      if (recommendation.key && masters.some((master) => master.id === recommendation.key)) this.masterId = recommendation.key;
+      this.masterMode = "guess";
+      this.masterIndex = this.currentMaster().notes[0].ply;
+      this.masterFeedback = "";
+    }
+    this.switchView(recommendation.target);
   }
   private reviewHtml() {
     if (!this.reviews.length) return "";
@@ -495,14 +579,21 @@ export class App {
     this.thinking = false;
     if (this.gameSaved) return;
     this.gameSaved = true;
+    const result = this.gameResult || this.game.result() || "*";
     this.state.games.unshift({
       id: crypto.randomUUID(),
       date: Date.now(),
       pgn: this.game.pgn(this.gameResult || undefined),
-      result: this.gameResult || this.game.result() || "*",
+      result,
       playerSide: this.player,
+      mode: this.playMode,
     });
     this.state.games = this.state.games.slice(0, 200);
+    if (this.playMode === "endgame") {
+      const won = (result === "1-0" && this.player === "w") || (result === "0-1" && this.player === "b");
+      const achievedDraw = this.endgameId === "philidor" && result === "1/2-1/2";
+      this.recordLearning("endgames", won || achievedDraw, this.endgameId);
+    }
     this.saveSoon();
   }
   private async makePlayMove(uciOrSan: string) {
@@ -904,6 +995,7 @@ export class App {
       this.state.srs[line.id] || freshSrs(),
       correct,
     );
+    this.recordLearning("openings", correct, line.id);
     this.saveSoon();
     this.announce(
       correct
@@ -1068,6 +1160,7 @@ export class App {
               this.announce(
                 "You selected " + square + "; target was " + this.sprintTarget,
               );
+            this.recordLearning("visualization", square === this.sprintTarget, `coordinate:${this.sprintTarget}`);
             this.sprintTarget = this.nextSquare();
             this.sprintOrientation = this.sprintCount % 2 === 0 ? "w" : "b";
             this.targetStarted = performance.now();
@@ -1138,10 +1231,9 @@ export class App {
         this.knightResult = correct
           ? "Exact shortest route. Well calculated."
           : `Not the shortest valid route. One answer: ${shortest.join(" → ")} (${shortest.length - 1} moves).`;
-        if (correct) {
-          this.state.stats.knightSolved++;
-          this.saveSoon();
-        }
+        if (correct) this.state.stats.knightSolved++;
+        this.recordLearning("visualization", correct, `knight:${this.knightFrom}-${this.knightTo}`);
+        this.saveSoon();
         this.announce(this.knightResult);
         this.render();
       });
@@ -1181,6 +1273,7 @@ export class App {
             $("calculation-answer") as HTMLInputElement
           ).value.trim(),
           sim = calculationStart(c);
+        let correct = false;
         for (const move of c.sequence) sim.move(move);
         try {
           const got = sim.move(answer).san;
@@ -1188,15 +1281,16 @@ export class App {
             c.answer,
           ).san;
           if (got.replace(/[+#]$/, "") === expected.replace(/[+#]$/, "")) {
+            correct = true;
             this.calculationFeedback = "Correct continuation: " + expected;
             this.state.stats.calcSolved++;
-            this.saveSoon();
           } else
             this.calculationFeedback = `That is legal, but the authored continuation is ${expected}. This is opening recall, not a proved winning tactic.`;
         } catch {
           this.calculationFeedback =
             "That move is not legal in the imagined position. Recalculate the sequence.";
         }
+        this.recordLearning("calculation", correct, c.id);
         this.announce(this.calculationFeedback);
         this.render();
       });
@@ -1220,6 +1314,7 @@ export class App {
     this.state.stats.colorAttempts++;
     if (correct) this.state.stats.colorCorrect++;
     this.colorResult = `${correct ? "Correct." : "Not quite."} ${this.colorTarget} is ${squareIsLight(this.colorTarget) ? "light" : "dark"}. Each step along a rank or file flips parity.`;
+    this.recordLearning("visualization", correct, `color:${this.colorTarget}`);
     this.announce(this.colorResult);
     this.saveSoon();
     this.render();
@@ -1339,19 +1434,21 @@ export class App {
     this.lastArrow = null;
     const solve = (attempt: string) => {
       const test = new Chess(b.fen);
+      let correct = false;
       try {
         const got = test.move(attempt);
         if (got.san.replace(/[+#]$/, "") === b.best.replace(/[+#]$/, "")) {
+          correct = true;
           b.solved++;
           this.blunderFeedback =
             "Correct: " + b.best + ". You found the tactical resource.";
-          this.saveSoon();
         } else
           this.blunderFeedback =
             "Legal, but not the authored solution. Reconsider the forcing moves.";
       } catch {
         this.blunderFeedback = "That move is illegal in this position.";
       }
+      this.recordLearning("tactics", correct, b.id);
       this.announce(this.blunderFeedback);
       this.render();
     };
@@ -1464,19 +1561,21 @@ export class App {
       const typed = ($("master-guess") as HTMLInputElement).value.trim();
       const expected = g.history[this.masterIndex],
         position = new Chess(expected.before);
+      let correct = false;
       try {
         const attempt = position.move(typed);
         if (attempt.san === expected.san) {
+          correct = true;
           this.masterFeedback =
             "Correct. " +
             (master.notes.find((n) => n.ply === this.masterIndex)?.text || "");
           this.state.stats.masterSolved++;
-          this.saveSoon();
         } else
           this.masterFeedback = `The game move was ${expected.san}. Your move was legal but different; no engine-approved partial credit is claimed.`;
       } catch {
         this.masterFeedback = "That move is illegal here.";
       }
+      this.recordLearning("study", correct, `${master.id}:${this.masterIndex}`);
       this.announce(this.masterFeedback);
       this.render();
     });
@@ -1487,13 +1586,19 @@ export class App {
     const install = this.installPrompt
       ? btn("install-app", "Install Stillpoint", "primary")
       : `<p class="helper">In Chrome or Chromium, use the browser menu → “Cast, save, and share” or “More tools” → “Install app” when offered. Installation requires HTTPS or localhost.</p>`;
+    const themeOptions = ([
+      ["indigo", "Indigo Focus"],
+      ["paper", "Lavender Paper"],
+      ["forest", "Forest Quiet"],
+      ["ember", "Ember Study"],
+    ] as const).map(([id, label]) => `<option value="${id}" ${s.settings.theme === id ? "selected" : ""}>${label}</option>`).join("");
     const panel = this.panel(
       "Your data stays here",
-      `${summary}<p>No game or position is sent to an analysis service. Current results are stored in this browser’s IndexedDB. Clearing browser storage or uninstalling may remove them; export a backup first.</p>
-   <div class="button-row">${btn("export-backup", "Export JSON backup", "primary")}<label for="import-backup" class="btn">Import backup</label><input id="import-backup" class="sr-only" type="file" accept="application/json,.json"></div><p class="helper">Imports are validated before they replace or merge with current data.</p><div class="section-rule"></div><div class="field-row"><label for="theme-select">Appearance</label><select id="theme-select"><option value="dark">Indigo / Dark</option><option value="light" ${s.settings.theme === "light" ? "selected" : ""}>Lavender / Light</option></select></div><label class="check-line"><input id="setting-coords" type="checkbox" ${s.settings.coords ? "checked" : ""}> Show board coordinates</label><div class="section-rule"></div>${btn("clear-data", "Clear all local progress", "danger")}<div class="section-rule"></div><h3>Install & offline</h3><p class="status-message"><span class="status-dot"></span> ${this.online ? "Online" : "Offline"} · ${this.offlineReady ? "Offline assets ready" : "Preparing offline assets"}</p>${install}<p class="helper">The app shell, training content, chess.js, and Stockfish WASM are cached together after a successful first online visit. Keep this version cached before going offline.</p>`,
+      `${summary}<p>No game, position, or learning signal is sent to an analysis service. Current results are stored in this browser’s IndexedDB. Clearing browser storage or uninstalling may remove them; export a backup first.</p>
+   <div class="button-row">${btn("export-backup", "Export JSON backup", "primary")}<label for="import-backup" class="btn">Import backup</label><input id="import-backup" class="sr-only" type="file" accept="application/json,.json"></div><p class="helper">Imports are validated before they replace or merge with current data.</p><div class="section-rule"></div><div class="field-row"><label for="theme-select">Colour theme</label><select id="theme-select">${themeOptions}</select></div><label class="check-line"><input id="setting-coords" type="checkbox" ${s.settings.coords ? "checked" : ""}> Show board coordinates</label><div class="section-rule"></div>${btn("clear-data", "Clear all local progress", "danger")}<div class="section-rule"></div><h3>Install & offline</h3><p class="status-message"><span class="status-dot"></span> ${this.online ? "Online" : "Offline"} · ${this.offlineReady ? "Offline assets ready" : "Preparing offline assets"}</p>${install}<p class="helper">The app shell, training content, chess.js, and Stockfish WASM are cached together after a successful first online visit. Keep this version cached before going offline.</p>`,
       "PRIVACY BY DESIGN",
     );
-    return `<div class="workspace-heading"><div><span class="overline">07 / DATA & PRIVACY</span><h1>Your Space</h1><p>Ownership includes the ability to leave with your records.</p></div></div><div class="settings-layout">${panel}<div class="panel"><span class="overline">IMPLEMENTATION STATUS</span><h2>Built to tell the truth</h2><p>This release uses mature chess rules and real local Stockfish analysis. It remains a focused training release, not a claim that every advanced item in the extended brief is complete.</p><div class="feature-status"><b>Included</b><p>chess.js rules, six Stockfish tiers, live coaching, review turning points, six opening lines with SRS, four visual exercises, five classical games, five endgame positions, Blunder Bank, backup/restore, install metadata, and a complete offline asset cache.</p><b>Still bounded</b><p>Opening coverage is a starter repertoire; calculation sequences train opening recall rather than certified tactics; endgames use objective-based practice without tablebase claims; reviews analyze your moves rather than every engine reply.</p></div></div></div>`;
+    return `<div class="workspace-heading"><div><span class="overline">08 / DATA & PRIVACY</span><h1>Your Space</h1><p>Ownership includes the ability to leave with your records.</p></div></div><div class="settings-layout">${panel}<div class="panel"><span class="overline">IMPLEMENTATION STATUS</span><h2>Built to tell the truth</h2><p>This release uses mature chess rules and real local Stockfish analysis. Its learning path is explainable and evidence-bounded, not a claim of calibrated chess measurement.</p><div class="feature-status"><b>Included</b><p>Adaptive practice recommendations, timestamped learning history, six Stockfish tiers, live coaching, review turning points, opening SRS, four visual exercises, classical games, endgames, Blunder Bank, backup/restore, four colour themes, and a complete offline asset cache.</p><b>Still bounded</b><p>Opening coverage is a starter repertoire; calculation sequences train opening recall rather than certified tactics; endgames use objective-based practice without tablebase claims; reviews analyze your moves rather than every engine reply.</p></div></div></div>`;
   }
   private wireSettings() {
     this.bind("install-app", () => {
@@ -1526,13 +1631,16 @@ export class App {
           let next: SaveState;
           if (method) {
             const games = new Map(this.state.games.map((g) => [g.id, g])),
-              blunders = new Map(this.state.blunders.map((b) => [b.id, b]));
+              blunders = new Map(this.state.blunders.map((b) => [b.id, b])),
+              learning = new Map(this.state.learning.map((attempt) => [attempt.id, attempt]));
             for (const g of imported.games) games.set(g.id, g);
             for (const b of imported.blunders) blunders.set(b.id, b);
+            for (const attempt of imported.learning) learning.set(attempt.id, attempt);
             next = {
               ...this.state,
               games: [...games.values()],
               blunders: [...blunders.values()],
+              learning: [...learning.values()].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5000),
               srs: { ...this.state.srs, ...imported.srs },
               stats: imported.stats,
               settings: this.state.settings,
@@ -1555,7 +1663,8 @@ export class App {
         }
       };
     this.onChange("theme-select", (v) => {
-      this.state.settings.theme = v as "dark" | "light";
+      if (!["indigo", "paper", "forest", "ember"].includes(v)) return;
+      this.state.settings.theme = v as Theme;
       this.saveSoon();
       this.render();
     });
