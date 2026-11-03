@@ -74,8 +74,9 @@ a {
 }
 .sr-only {
   position: absolute !important;
-  width: 1px;
-  height: 1px;
+  width: 1px !important;
+  height: 1px !important;
+  min-height: 0 !important;
   padding: 0;
   margin: -1px;
   overflow: hidden;
@@ -1181,4 +1182,26 @@ input:not([type="checkbox"]):hover, select:hover { border-color: var(--muted); }
   .navigation { padding-left: 10px; padding-right: 10px; }
   .panel { padding: 17px; }
   .workspace-heading h1 { font-size: 27px; }
+}
+
+/* Quiet, compositor-friendly polish; never block input or obscure position. */
+body, .navigation, .panel, .board-mount {
+  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+.btn, .nav-link, .subtab, .move-chip {
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, filter 140ms ease, transform 140ms ease;
+}
+.btn:active, .nav-link:active, .subtab:active, .move-chip:active { transform: scale(.98); }
+@media (hover: hover) {
+  .btn:hover { transform: translateY(-1px); }
+}
+.main-content.view-enter > * { animation: view-in 220ms cubic-bezier(.2, .7, .2, 1) both; }
+.square.legal-target::after { animation: target-in 140ms ease-out both; }
+@keyframes view-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes target-in {
+  from { opacity: 0; transform: scale(.72); }
+  to { opacity: 1; transform: scale(1); }
 }

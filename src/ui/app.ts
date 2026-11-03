@@ -45,8 +45,8 @@ const esc = (s: unknown) =>
       ]!,
   );
 const $ = (id: string) => document.getElementById(id) as HTMLElement | null;
-function btn(id: string, label: string, variant = "") {
-  return `<button id="${id}" type="button" class="btn ${variant}">${label}</button>`;
+function btn(id: string, label: string, variant = "", disabled = false) {
+  return `<button id="${id}" type="button" class="btn ${variant}" ${disabled ? "disabled" : ""}>${label}</button>`;
 }
 function download(name: string, text: string, type = "text/plain") {
   const url = URL.createObjectURL(new Blob([text], { type })),
@@ -307,6 +307,15 @@ export class App {
     }
     this.view = view;
     this.render();
+    $("main-content")?.classList.add("view-enter");
+    const navigation = document.querySelector<HTMLElement>(".navigation nav");
+    const activeTab = navigation?.querySelector<HTMLElement>(".nav-link.active");
+    if (navigation && activeTab && navigation.scrollWidth > navigation.clientWidth) {
+      navigation.scrollTo({
+        left: activeTab.offsetLeft - (navigation.clientWidth - activeTab.offsetWidth) / 2,
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      });
+    }
     if (view === "play") {
       if (this.selectedTime !== "zen" && !this.gameResult) this.startClock();
       if (this.game.turn !== this.player && !this.gameResult) this.engineMove();
@@ -336,9 +345,12 @@ export class App {
   private panel(title: string, inner: string, overline = "SESSION") {
     return `<div class="panel"><span class="overline">${overline}</span><h2>${title}</h2>${inner}</div>`;
   }
-  private render() {
+  private applyTheme() {
     document.body.dataset.theme = this.state.settings.theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColors[this.state.settings.theme]);
+  }
+  private render() {
+    this.applyTheme();
     const active = nav.find((n) => n[0] === this.view);
     this.root.innerHTML = `<div class="app-shell"><aside class="navigation"><div class="brand"><div class="brand-symbol">♔</div><div><div class="brand-title">STILLPOINT</div><div class="brand-subtitle">A CHESS PRACTICE</div></div></div><div class="nav-caption">YOUR PRACTICE</div><nav aria-label="Main navigation">${nav.map(([id, label, glyph]) => `<button class="nav-link ${id === this.view ? "active" : ""}" data-view="${id}" type="button" ${id === this.view ? 'aria-current="page"' : ""}><span class="nav-glyph">${glyph}</span>${label}</button>`).join("")}</nav><div class="nav-bottom"><div class="practice-line">道 · 愛 · 不二</div><small>Truth on the board.<br>Progress stays on this device.</small></div></aside><main id="main-content" class="main-content">${this.renderMain()}</main><div id="live" class="sr-only" aria-live="polite" aria-atomic="true">${esc(this.announcements)}</div></div>`;
     document
@@ -516,7 +528,7 @@ export class App {
    <label class="check-line"><input id="coach-toggle" type="checkbox" ${this.coach ? "checked" : ""}> Live coach · experimental search evaluation</label>`;
     const side = this.panel(
       "Your table",
-      `${settings}<div class="button-row">${btn("new-game", "New game", "primary")}${btn("flip-board", "Flip board")}</div><div class="button-row">${this.selectedTime === "zen" ? btn("takeback", "Takeback") : ""}${btn("resign", "Resign")}${btn("claim-draw", "Claim draw")}</div><div class="button-row">${this.boardBlind === "blindfold" ? btn("peek", "Peek for 3s") : ""}${btn("export-pgn", "Export PGN")}</div><div class="section-rule"></div><label for="move-input" class="overline">MOVE INPUT</label><form id="move-form" class="inline-form"><input id="move-input" aria-label="Enter move in algebraic notation" placeholder="e4, Nf3, e2e4…" autocomplete="off"><button type="submit" class="btn primary">Play</button></form><p class="helper">Tap two squares, drag a piece, or enter SAN/UCI.</p><details class="setup-details"><summary>Load custom FEN or PGN</summary><textarea id="setup-text" rows="3" aria-label="Custom FEN or PGN" placeholder="Paste a valid FEN or PGN here"></textarea>${btn("load-setup", "Load position")}</details><div class="section-rule"></div><h3>Coach’s observation</h3><p class="coach-box">${esc(this.coachMessage || "After your move, local Stockfish compares the preferred continuation with the resulting position. Evaluations are estimates, not explanations of human intent.")}</p><div class="section-rule"></div><h3>Move record</h3><div class="move-history">${moveList || '<span class="muted">The first move is yours.</span>'}</div>${result ? `<p class="result-line">Game ended: ${result}</p>` : ""}${this.reviewHtml()}`, 
+      `${settings}<div class="button-row">${btn("new-game", "New game", "primary")}${btn("flip-board", "Flip board")}</div><div class="button-row">${this.selectedTime === "zen" ? btn("takeback", "Takeback") : ""}${btn("resign", "Resign")}${btn("claim-draw", "Claim draw")}</div><div class="button-row">${this.boardBlind === "blindfold" ? btn("peek", "Peek for 3s") : ""}${btn("export-pgn", "Export PGN")}</div><div class="section-rule"></div><label for="move-input" class="overline">MOVE INPUT</label><form id="move-form" class="inline-form"><input id="move-input" aria-label="Enter move in algebraic notation" placeholder="e4, Nf3, e2e4…" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="send"><button type="submit" class="btn primary">Play</button></form><p class="helper">Tap two squares, drag a piece, or enter SAN/UCI.</p><details class="setup-details"><summary>Load custom FEN or PGN</summary><textarea id="setup-text" rows="3" aria-label="Custom FEN or PGN" placeholder="Paste a valid FEN or PGN here"></textarea>${btn("load-setup", "Load position")}</details><div class="section-rule"></div><h3>Coach’s observation</h3><p class="coach-box">${esc(this.coachMessage || "After your move, local Stockfish compares the preferred continuation with the resulting position. Evaluations are estimates, not explanations of human intent.")}</p><div class="section-rule"></div><h3>Move record</h3><div class="move-history">${moveList || '<span class="muted">The first move is yours.</span>'}</div>${result ? `<p class="result-line">Game ended: ${result}</p>` : ""}${this.reviewHtml()}`,
       "PRACTICE AGAINST THE ENGINE",
     );
     return this.layout(
@@ -878,7 +890,7 @@ export class App {
     const card =
       this.openingMode === "walk"
         ? `<div class="opening-note"><b>Strategic idea</b><p>${esc(line.idea)}</p><b>Common mistake</b><p>${esc(line.trap)}</p></div><div class="button-row">${btn("opening-prev", "← Previous")}${btn("opening-next", "Next →", "primary")}</div><p class="helper">${this.openingIndex}/${line.moves.length} plies · ${next ? `Next: ${esc(next)}` : "Line complete"}</p>`
-        : `<div class="coach-box">${this.openingIndex >= line.moves.length ? "Drill complete." : isPlayersTurn ? "Find your repertoire move on the board. Multiple authored alternatives can be accepted." : "Opponent reply incoming…"}</div><div class="button-row">${btn("opening-restart", "Restart drill")}${btn("opening-hint", "Reveal next move")}</div><form id="opening-move-form" class="inline-form"><input id="opening-move" aria-label="Enter opening move" placeholder="SAN or UCI"><button class="btn primary" type="submit">Play</button></form><p class="helper">Correct moves ${this.openingCorrect} · retries ${this.openingErrors}</p>`;
+        : `<div class="coach-box">${this.openingIndex >= line.moves.length ? "Drill complete." : isPlayersTurn ? "Find your repertoire move on the board. Multiple authored alternatives can be accepted." : "Opponent reply incoming…"}</div><div class="button-row">${btn("opening-restart", "Restart drill")}${btn("opening-hint", "Reveal next move")}</div><form id="opening-move-form" class="inline-form"><input id="opening-move" aria-label="Enter opening move" placeholder="SAN or UCI" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="send"><button class="btn primary" type="submit">Play</button></form><p class="helper">Correct moves ${this.openingCorrect} · retries ${this.openingErrors}</p>`;
     const side = this.panel(
       line.title,
       `${selector}${modes}${card}<div class="section-rule"></div><h3>Memory schedule</h3><div class="progress-track"><div style="width:${stat.masteryPercent}%"></div></div><p class="helper">Mastery ${stat.masteryPercent}% · ${stat.attempts} completed review${stat.attempts === 1 ? "" : "s"} · ${due(stat) ? "Due now" : "Next review " + new Date(stat.nextDueTimestamp).toLocaleDateString()}</p>${btn("reset-opening", "Reset this line")}`,
@@ -1065,7 +1077,7 @@ export class App {
         "60-SECOND SPRINT",
       );
     } else if (this.gym === "color") {
-      board = `<div class="mental-surface"><div class="mental-icon">◇</div><span class="overline">NO BOARD · MENTAL SPACE</span><h2>${this.colorTarget}</h2><p>Is this a light square or a dark square?</p><div class="button-row center">${btn("choose-light", "Light square", "primary")}${btn("choose-dark", "Dark square")}</div><p class="mental-result">${esc(this.colorResult)}</p></div>`;
+      board = `<div class="mental-surface"><div class="mental-icon">◇</div><span class="overline">NO BOARD · MENTAL SPACE</span><h2>${this.colorTarget}</h2><p>Is this a light square or a dark square?</p><div class="button-row center">${btn("choose-light", "Light square", "primary", Boolean(this.colorResult))}${btn("choose-dark", "Dark square", "", Boolean(this.colorResult))}</div><p class="mental-result">${esc(this.colorResult || "Choose once, then move to the next coordinate.")}</p></div>`;
       side = this.panel(
         "Color sense",
         `<p>Use the parity of file and rank. a1 is dark; moving one file or one rank flips the color.</p><div class="metrics"><div><b>${this.state.stats.colorCorrect}</b><small>Correct</small></div><div><b>${this.state.stats.colorAttempts}</b><small>Attempts</small></div></div>${btn("color-next", "Next coordinate", "primary")}`,
@@ -1503,7 +1515,7 @@ export class App {
       `<div class="field-row"><label for="master-select">Master game</label><select id="master-select">${masters.map((m) => `<option value="${m.id}" ${m.id === this.masterId ? "selected" : ""}>${esc(m.white)} vs ${esc(m.black)}, ${m.year}</option>`).join("")}</select></div>
   <p class="helper">${esc(master.white)} — ${esc(master.black)} · ${master.year} · ${master.result}</p><div class="segment">${btn("study-mode", "Study", this.masterMode === "study" ? "current" : "")}${btn("guess-mode", "Guess the move", this.masterMode === "guess" ? "current" : "")}</div><div class="button-row">${btn("master-prev", "← Back")}${btn("master-next", "Forward →", "primary")}</div>
   <div class="coach-box">${atCritical ? "Critical moment. Find the master’s next move." : esc(master.notes.find((n) => n.ply === this.masterIndex - 1)?.text || "Watch the pieces coordinate; track threats before the next move.")}</div>
-  ${atCritical ? `<form id="master-guess-form" class="inline-form"><input id="master-guess" aria-label="Guess the master's move" placeholder="SAN or UCI"><button class="btn primary" type="submit">Guess</button></form>` : ""}<p class="helper">${esc(this.masterFeedback)}</p><div class="section-rule"></div><h3>Move score · ${this.masterIndex}/${g.history.length}</h3><div class="move-history">${chips}</div><a class="source-link" target="_blank" rel="noopener noreferrer" href="${esc(master.source)}">Game score provenance ↗</a>`,
+  ${atCritical ? `<form id="master-guess-form" class="inline-form"><input id="master-guess" aria-label="Guess the master's move" placeholder="SAN or UCI" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="send"><button class="btn primary" type="submit">Guess</button></form>` : ""}<p class="helper">${esc(this.masterFeedback)}</p><div class="section-rule"></div><h3>Move score · ${this.masterIndex}/${g.history.length}</h3><div class="move-history">${chips}</div><a class="source-link" target="_blank" rel="noopener noreferrer" href="${esc(master.source)}">Game score provenance ↗</a>`,
       "HONOR THOSE WHO CAME BEFORE",
     );
     return this.layout(
@@ -1666,7 +1678,7 @@ export class App {
       if (!["indigo", "paper", "forest", "ember"].includes(v)) return;
       this.state.settings.theme = v as Theme;
       this.saveSoon();
-      this.render();
+      this.applyTheme();
     });
     const cb = $("setting-coords") as HTMLInputElement | null;
     if (cb)

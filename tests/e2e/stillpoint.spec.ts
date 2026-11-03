@@ -102,21 +102,27 @@ test("production app, engine, and training reload while offline", async ({ page,
   await context.setOffline(false);
 });
 
-test("learning path records practice and opens an adaptive recommendation", async ({ page }) => {
+test("learning path records distinct practice attempts and opens a recommendation", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
   await page.getByRole("button", { name: "Visualization" }).click();
   await page.getByRole("button", { name: "Square Color" }).click();
   await page.getByRole("button", { name: "Dark square" }).click();
-  await page.getByRole("button", { name: "Dark square" }).click();
   await expect(page.locator(".mental-result")).toContainText("a1 is dark");
+  await expect(page.getByRole("button", { name: "Dark square" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Light square" })).toBeDisabled();
+  await page.getByRole("button", { name: "Next coordinate" }).click();
+  const target = (await page.locator(".mental-surface h2").textContent())!.trim();
+  const isLight = (target.charCodeAt(0) - 97 + Number(target[1])) % 2 === 0;
+  await page.getByRole("button", { name: isLight ? "Light square" : "Dark square" }).click();
+  await expect(page.locator(".mental-result")).toContainText(`Correct. ${target}`);
 
   await page.getByRole("button", { name: "Learning Path" }).click();
   await expect(page.getByRole("heading", { name: "Practice what matters next" })).toBeVisible();
   await expect(page.locator(".path-intro .metrics > div").first()).toContainText("2");
   await expect(page.locator(".activity-row")).toHaveCount(2);
-  await expect(page.locator(".activity-row").first()).toContainText("color:a1");
+  await expect(page.locator(".activity-row").last()).toContainText("color:a1");
   await expect(page.locator(".skill-row").filter({ hasText: "Visualization" })).toContainText("Strength");
   await page.getByRole("button", { name: "Open visualization" }).click();
   await expect(page.getByRole("heading", { name: "Visualization Gym" })).toBeVisible();
@@ -129,11 +135,18 @@ test("all four colour themes are distinct and persist after reload", async ({ pa
   const select = page.locator("#theme-select");
   await expect(select.locator("option")).toHaveCount(4);
   const backgrounds = new Set<string>();
-  for (const theme of ["indigo", "paper", "forest", "ember"]) {
+  const expected = {
+    indigo: "rgb(12, 13, 43)",
+    paper: "rgb(241, 240, 237)",
+    forest: "rgb(16, 27, 24)",
+    ember: "rgb(246, 234, 217)",
+  };
+  for (const theme of ["indigo", "paper", "forest", "ember"] as const) {
     await select.selectOption(theme);
     await expect(page.locator("body")).toHaveAttribute("data-theme", theme);
     await expect(select).toHaveValue(theme);
-    backgrounds.add(await page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor));
+    await expect(page.locator("body")).toHaveCSS("background-color", expected[theme]);
+    backgrounds.add(expected[theme]);
   }
   expect(backgrounds.size).toBe(4);
   await page.reload();
@@ -141,4 +154,27 @@ test("all four colour themes are distinct and persist after reload", async ({ pa
   await expect(page.locator("body")).toHaveAttribute("data-theme", "ember");
   await expect(page.locator("#theme-select")).toHaveValue("ember");
   await page.locator("#theme-select").selectOption("indigo");
+});
+
+test("view motion, mobile tab centering, and reduced motion remain unobtrusive", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Visualization" }).click();
+  await expect(page.locator("main")).toHaveClass(/view-enter/);
+  const motion = await page.locator("main > *").first().evaluate((element) => getComputedStyle(element).animationName);
+  expect(motion).toBe("view-in");
+
+  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  await expect.poll(() => page.locator(".nav-link.active").evaluate((tab) => {
+    const bounds = tab.getBoundingClientRect();
+    const navigation = tab.closest("nav")!.getBoundingClientRect();
+    return bounds.left >= navigation.left - 1 && bounds.right <= navigation.right + 1;
+  })).toBe(true);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+  expect(overflow).toBe(false);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("button", { name: "Learning Path" }).click();
+  const reducedMotion = await page.locator("main > *").first().evaluate((element) => getComputedStyle(element).animationName);
+  expect(reducedMotion).toBe("none");
 });

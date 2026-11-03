@@ -14,16 +14,18 @@
 | `npm run build` | PASS — strict TypeScript, Vite production bundle, generated service worker, 40 local assets precached |
 | `npm run test:unit` | PASS — 31 passed, 0 failed; includes initial perft 20/400/8902, chess rules, PGN export/reimport, data continuity, evaluation/mate parsing, SRS, knight BFS, backup validation, adaptive learning, and theme migration |
 | `npm run test:static` | PASS — all 40 assets, Stockfish WASM, manifest, and icons served beneath `/sample-repository/` |
-| `npm run test:e2e` | PASS — 7 Chromium tests passed, 0 failed/skipped |
+| `npm run test:e2e` | PASS — 8 Chromium tests passed, 0 failed/skipped |
 | Real engine game and coach review | PASS — legal user move, real Stockfish reply, two move records, and review UI observed in Chromium |
 | Direct UCI worker check | PASS — `uci`/`uciok` and a legal `bestmove` from the bundled worker |
 | Mobile training flow | PASS at 390 × 844 — Opening Dojo, Visualization, feedback, and no main-content horizontal overflow |
-| Learning Path flow | PASS — two real Visualization attempts appeared in the activity trail; readiness updated; the recommendation opened the intended exercise |
-| Four-theme flow | PASS — Indigo Focus, Lavender Paper, Forest Quiet, and Ember Study produced distinct backgrounds; Ember Study persisted after reload |
+| Learning Path flow | PASS — two distinct Visualization attempts appeared in the activity trail; answered prompts locked against duplicate taps; the recommendation opened the intended exercise |
+| Four-theme flow | PASS — Indigo Focus, Lavender Paper, Forest Quiet, and Ember Study reached distinct final backgrounds after their transitions; Ember Study persisted after reload |
+| Motion and mobile navigation | PASS — view entrance ran normally; active mobile tab centered; reduced motion removed animation; Data & Privacy had no document-level horizontal overflow |
+| Production animation check | PASS — moved-piece Web Animations API glide observed; reduced-motion move produced zero active animations |
 | Piece artwork and visibility modes | PASS — 32 local SVGs loaded; Ghost remained at 25% opacity; Discs and Full blindfold changed rendering as intended; accessible square labels and Standard mode remained intact |
 | Offline production reentry | PASS — service worker cached WASM and artwork; after offline reload, 32 visible/loaded SVG pieces, training, and Stockfish reply still worked |
 | PGN regression | PASS — exported result is not duplicated and the exported game round-trips to the same final FEN |
-| Visual inspection | PASS at 1440 × 1000 desktop and 390 × 844 mobile viewports; Learning Path inspected in all four palettes, with no horizontal overflow or page errors; final single-skill presentation rechecked after correction |
+| Visual inspection | PASS at 1440 × 1000 desktop and 390 × 844 mobile viewports; Learning Path, all four palettes, Play, and Data & Privacy inspected without page errors |
 
 The complete `npm run verify` sequence was executed successfully. Browser tests ran against the production build through Vite preview. The production bundle is approximately 2.6 MB, dominated by the locally cached Stockfish WASM asset.
 

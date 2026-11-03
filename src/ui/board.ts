@@ -1,5 +1,7 @@
 import { Chess, coord, idx, type Color } from "../core/chess/Chess.js";
 
+let lastAnimatedPosition = "";
+
 export type BlindTier = "standard" | "ghost" | "discs" | "blindfold";
 export type BoardOptions = {
   orientation?: Color;
@@ -136,6 +138,7 @@ export class BoardView {
       grid.append(button);
     }
     this.root.append(grid);
+    this.animateMove(grid, game.fen(), options.lastMove);
 
     if (options.arrow && /^[a-h][1-8][a-h][1-8]/.test(options.arrow.uci)) {
       const from = idx(options.arrow.uci.slice(0, 2));
@@ -177,5 +180,33 @@ export class BoardView {
       svg.append(line);
       this.root.append(svg);
     }
+  }
+
+  private animateMove(grid: HTMLDivElement, fen: string, lastMove?: string) {
+    if (!lastMove || !/^[a-h][1-8][a-h][1-8]/.test(lastMove)) {
+      lastAnimatedPosition = "";
+      return;
+    }
+    const positionKey = `${fen}|${lastMove}`;
+    if (positionKey === lastAnimatedPosition) return;
+    lastAnimatedPosition = positionKey;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    requestAnimationFrame(() => {
+      if (!grid.isConnected) return;
+      const from = grid.querySelector<HTMLElement>(`[data-square="${lastMove.slice(0, 2)}"]`);
+      const to = grid.querySelector<HTMLElement>(`[data-square="${lastMove.slice(2, 4)}"]`);
+      const piece = to?.querySelector<HTMLElement>(".piece");
+      if (!from || !to || !piece) return;
+      const fromRect = from.getBoundingClientRect();
+      const pieceRect = piece.getBoundingClientRect();
+      const x = fromRect.left + fromRect.width / 2 - (pieceRect.left + pieceRect.width / 2);
+      const y = fromRect.top + fromRect.height / 2 - (pieceRect.top + pieceRect.height / 2);
+      if (!x && !y) return;
+      piece.animate(
+        [{ transform: `translate(${x}px, ${y}px)` }, { transform: "translate(0, 0)" }],
+        { duration: 180, easing: "cubic-bezier(.2, .75, .25, 1)" },
+      );
+    });
   }
 }
