@@ -24,6 +24,7 @@ import {
   type LearningArea,
   type Theme,
 } from "../core/storage/db.js";
+import { PRACTICE_RECOVERY_KEY, parsePracticeRecovery } from "../core/storage/recovery.js";
 import { freshSrs, due, review } from "../core/srs/scheduler.js";
 import { buildLearningProfile, type Recommendation } from "../core/learning/engine.js";
 import {
@@ -188,6 +189,7 @@ export class App {
       this.state.seededStarter = true;
       await this.db.write(this.state);
     }
+    const recovered = this.restorePracticeRecovery();
     window.addEventListener("beforeinstallprompt", (event) => {
       event.preventDefault();
       this.installPrompt = event as InstallPromptEvent;
@@ -211,6 +213,7 @@ export class App {
       }).catch(() => { this.offlineReady = false; });
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
+        this.savePracticeRecovery();
         this.stopClock();
         this.stopGymInterval();
         this.engine.cancel();
@@ -235,12 +238,17 @@ export class App {
       }
     });
     window.addEventListener("pagehide", () => {
+      this.savePracticeRecovery();
       this.stopClock();
       this.stopGymInterval();
       this.engine.destroy();
       this.db.close();
     });
     this.render();
+    if (recovered) {
+      if (this.selectedTime !== "zen" && !this.gameResult) this.startClock();
+      if (this.game.turn !== this.player && !this.gameResult) this.engineMove();
+    }
   }
   private announce(text: string) {
     this.announcements = text;
@@ -264,6 +272,57 @@ export class App {
     this.state.learning = this.state.learning.slice(0, 2000);
     this.saveSoon();
   }
+  private savePracticeRecovery() {
+    if (this.playMode !== "play" || this.view !== "play") return;
+    try {
+      localStorage.setItem(PRACTICE_RECOVERY_KEY, JSON.stringify({
+        version: 1,
+        savedAt: Date.now(),
+        pgn: this.game.pgn(this.gameResult || undefined),
+        fen: this.game.fen(),
+        player: this.player,
+        orientation: this.orientation,
+        gameResult: this.gameResult,
+        gameSaved: this.gameSaved,
+        selectedTime: this.selectedTime,
+        clocks: this.clocks,
+        increment: this.increment,
+        coach: this.coach,
+        status: this.status,
+        depth: this.depth,
+      }));
+    } catch {
+      // Recovery is an enhancement; blocked or full storage must not interrupt chess.
+    }
+  }
+  private restorePracticeRecovery() {
+    try {
+      const raw = localStorage.getItem(PRACTICE_RECOVERY_KEY);
+      const saved = parsePracticeRecovery(raw);
+      if (!saved) {
+        if (raw) localStorage.removeItem(PRACTICE_RECOVERY_KEY);
+        return false;
+      }
+      this.playMode = "play";
+      this.playSnapshot = null;
+      this.game = new Chess().loadPgn(saved.pgn);
+      this.player = saved.player;
+      this.orientation = saved.orientation;
+      this.gameResult = saved.gameResult;
+      this.gameSaved = saved.gameSaved;
+      this.selectedTime = saved.selectedTime;
+      this.clocks = [...saved.clocks];
+      this.increment = saved.increment;
+      this.coach = saved.coach;
+      this.depth = saved.depth;
+      const previousStatus = saved.status.replace(/^(?:Recovered recent practice · )+/, "");
+      this.status = `Recovered recent practice · ${previousStatus}`;
+      this.announcements = "Recent practice game restored";
+      return true;
+    } catch {
+      return false;
+    }
+  }
   private bind(id: string, fun: () => void) {
     const el = $(id);
     if (el) el.addEventListener("click", fun);
@@ -274,7 +333,7 @@ export class App {
   }
   private switchView(view: string) {
     if (view === this.view) return;
-    if (this.view === "play" && view !== "play")
+    if (this.view === "play" && view !== "play") {
       this.playSnapshot = {
         game: this.game,
         player: this.player,
@@ -286,6 +345,8 @@ export class App {
         coach: this.coach,
         status: this.status,
       };
+      this.savePracticeRecovery();
+    }
     this.revision++;
     this.engine.cancel();
     this.thinking = false;
@@ -537,7 +598,7 @@ export class App {
       "Settle your attention. See the position as it is.",
       board,
       side,
-      "Stockfish 19 Lite runs locally in a single-threaded Web Worker. No position or game is sent to an analysis service.",
+      "Stockfish 19 Lite runs locally in a single-threaded Web Worker. No position or game is sent to an analysis service. Recent practice is recoverable for 10 minutes on this device.",
     );
   }
   private formatClock(s: number) {
@@ -560,6 +621,7 @@ export class App {
     this.increment = tc?.inc || 0;
     if (tc) this.startClock();
     this.render();
+    this.savePracticeRecovery();
     if (this.player === "b") await this.engineMove();
   }
   private stopClock() {
@@ -607,6 +669,7 @@ export class App {
       this.recordLearning("endgames", won || achievedDraw, this.endgameId);
     }
     this.saveSoon();
+    this.savePracticeRecovery();
   }
   private async makePlayMove(uciOrSan: string) {
     if (this.thinking || this.gameResult || this.game.result()) {
@@ -631,6 +694,7 @@ export class App {
     if (this.selectedTime !== "zen")
       this.clocks[side === "w" ? 0 : 1] += this.increment;
     this.render();
+    this.savePracticeRecovery();
     const rev = ++this.revision;
     if (this.coach) {
       this.thinking = true;
@@ -720,6 +784,7 @@ export class App {
       }
       this.thinking = false;
       this.render();
+      this.savePracticeRecovery();
     } catch (e) {
       if (rev !== this.revision) return;
       this.thinking = false;
@@ -740,6 +805,7 @@ export class App {
     });
     this.onChange("strength-choice", (v) => {
       this.depth = Number(v);
+      this.savePracticeRecovery();
     });
     this.onChange("time-choice", (v) => {
       this.selectedTime = v;
@@ -754,11 +820,13 @@ export class App {
       coach.onchange = () => {
         this.coach = coach.checked;
         this.render();
+        this.savePracticeRecovery();
       };
     this.bind("new-game", () => this.startNewGame());
     this.bind("flip-board", () => {
       this.orientation = this.orientation === "w" ? "b" : "w";
       this.render();
+      this.savePracticeRecovery();
     });
     this.bind("takeback", () => {
       this.revision++;
@@ -772,6 +840,7 @@ export class App {
       this.lastArrow = null;
       this.status = "Move taken back";
       this.render();
+      this.savePracticeRecovery();
     });
     this.bind("resign", () => {
       if (this.gameResult || this.game.history.length === 0) return;
@@ -821,6 +890,7 @@ export class App {
         this.status = "Custom position imported";
         this.coachMessage = "";
         this.render();
+        this.savePracticeRecovery();
         if (this.game.turn !== this.player && !this.gameResult)
           this.engineMove();
       } catch (e) {
@@ -866,6 +936,7 @@ export class App {
         this.coachMessage = "Practice from the critical position. The original game remains in your saved history.";
         this.status = "Find a stronger continuation";
         this.render();
+        this.savePracticeRecovery();
       }),
     );
   }
@@ -1606,7 +1677,7 @@ export class App {
     ] as const).map(([id, label]) => `<option value="${id}" ${s.settings.theme === id ? "selected" : ""}>${label}</option>`).join("");
     const panel = this.panel(
       "Your data stays here",
-      `${summary}<p>No game, position, or learning signal is sent to an analysis service. Current results are stored in this browser’s IndexedDB. Clearing browser storage or uninstalling may remove them; export a backup first.</p>
+      `${summary}<p>No game, position, or learning signal is sent to an analysis service. Current results are stored in this browser’s IndexedDB; a temporary practice snapshot is kept in local storage for 10 minutes. Clearing browser storage or uninstalling may remove them; export a backup first.</p>
    <div class="button-row">${btn("export-backup", "Export JSON backup", "primary")}<label for="import-backup" class="btn">Import backup</label><input id="import-backup" class="sr-only" type="file" accept="application/json,.json"></div><p class="helper">Imports are validated before they replace or merge with current data.</p><div class="section-rule"></div><div class="field-row"><label for="theme-select">Colour theme</label><select id="theme-select">${themeOptions}</select></div><label class="check-line"><input id="setting-coords" type="checkbox" ${s.settings.coords ? "checked" : ""}> Show board coordinates</label><div class="section-rule"></div>${btn("clear-data", "Clear all local progress", "danger")}<div class="section-rule"></div><h3>Install & offline</h3><p class="status-message"><span class="status-dot"></span> ${this.online ? "Online" : "Offline"} · ${this.offlineReady ? "Offline assets ready" : "Preparing offline assets"}</p>${install}<p class="helper">The app shell, training content, chess.js, and Stockfish WASM are cached together after a successful first online visit. Keep this version cached before going offline.</p>`,
       "PRIVACY BY DESIGN",
     );
@@ -1699,8 +1770,16 @@ export class App {
       this.state = freshState();
       this.state.seededStarter = true;
       this.blunderId = "";
+      let recoveryCleared = true;
+      try {
+        localStorage.removeItem(PRACTICE_RECOVERY_KEY);
+      } catch {
+        recoveryCleared = false;
+      }
       await this.save();
-      this.announce("Local progress cleared");
+      this.announce(recoveryCleared
+        ? "Local progress cleared"
+        : "Local progress cleared; browser blocked temporary snapshot cleanup");
       this.render();
     });
   }

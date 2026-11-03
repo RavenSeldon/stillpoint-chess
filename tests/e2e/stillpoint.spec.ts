@@ -178,3 +178,59 @@ test("view motion, mobile tab centering, and reduced motion remain unobtrusive",
   const reducedMotion = await page.locator("main > *").first().evaluate((element) => getComputedStyle(element).animationName);
   expect(reducedMotion).toBe("none");
 });
+
+test("recent practice survives navigation and reload with its settings", async ({ page }) => {
+  const recoveryKey = "stillpoint.practice-recovery.v1";
+  await page.goto("/");
+  await page.locator("#coach-toggle").uncheck();
+  await page.locator("#strength-choice").selectOption("2");
+  await page.getByRole("textbox", { name: "Enter move in algebraic notation" }).fill("e4");
+  await page.locator("#move-form button").click();
+  await expect(page.getByText(/Engine played/).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".move-chip")).toHaveCount(2);
+  await page.locator("#flip-board").click();
+  await page.getByRole("button", { name: "Learning Path" }).click();
+  await expect(page.getByRole("heading", { name: "Practice what matters next" })).toBeVisible();
+  expect(await page.evaluate((key) => localStorage.getItem(key), recoveryKey)).not.toBeNull();
+
+  await page.reload();
+  await expect(page.locator(".board-note")).toContainText("Recovered recent practice");
+  await expect(page.locator(".move-chip")).toHaveCount(2);
+  await expect(page.locator("#side-choice")).toHaveValue("w");
+  await expect(page.locator("#strength-choice")).toHaveValue("2");
+  await expect(page.locator("#coach-toggle")).not.toBeChecked();
+  await expect(page.locator(".square").first()).toHaveAttribute("aria-label", /h1/);
+  await expect(page.getByText(/Recent practice is recoverable for 10 minutes/)).toBeVisible();
+
+  await page.reload();
+  await expect(page.locator(".move-chip")).toHaveCount(2);
+  await expect(page.locator(".board-note")).not.toContainText("Recovered recent practice · Recovered recent practice");
+});
+
+test("an expired practice snapshot is removed instead of restored", async ({ page }) => {
+  const recoveryKey = "stillpoint.practice-recovery.v1";
+  await page.addInitScript(({ key }) => {
+    localStorage.setItem(key, JSON.stringify({
+      version: 1,
+      savedAt: Date.now() - 10 * 60 * 1000 - 1,
+      pgn: "1. e4 e5",
+      fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2",
+      player: "w",
+      orientation: "w",
+      gameResult: null,
+      gameSaved: false,
+      selectedTime: "zen",
+      clocks: [0, 0],
+      increment: 0,
+      coach: false,
+      status: "Engine played e5",
+      depth: 2,
+    }));
+  }, { key: recoveryKey });
+  await page.goto("/");
+  await expect(page.locator(".square")).toHaveCount(64);
+  await expect(page.locator(".move-chip")).toHaveCount(0);
+  await expect(page.locator(".board-note")).toContainText("Ready for a new game");
+  await expect(page.locator(".board-note")).not.toContainText("Recovered recent practice");
+  expect(await page.evaluate((key) => localStorage.getItem(key), recoveryKey)).toBeNull();
+});

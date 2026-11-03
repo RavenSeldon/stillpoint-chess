@@ -24,7 +24,7 @@ The deployable static site is generated in `dist/`. Do not open it through `file
 
 ## What is included
 
-- **Play:** tap, drag, SAN, or UCI input; White, Black, or random side; custom FEN/PGN; untimed and timed practice; takeback in untimed games; draw claims; resignation; board flip; blindfold visibility levels; PGN export.
+- **Play:** tap, drag, SAN, or UCI input; White, Black, or random side; custom FEN/PGN; untimed and timed practice; takeback in untimed games; draw claims; resignation; board flip; blindfold visibility levels; PGN export; ten-minute recovery of the latest practice position and settings after leaving or reloading.
 - **Learning Path:** four actionable recommendations, seven practice-readiness signals, relative strengths and growth edges, recent trends, evidence labels, and an activity trail. Every recommendation opens a real local exercise.
 - **Four complete themes:** Indigo Focus, Lavender Paper, Forest Quiet, and Ember Study, each with coordinated navigation, panels, controls, and board colors. Legacy light/dark preferences migrate automatically.
 - **Modern visual system:** locally bundled scalable Cburnett SVG pieces, clear selection/capture states, last-move highlights, short moved-piece glides, gentle view/theme transitions, tactile controls, reduced-motion support, and responsive navigation that centers the active mobile tab.
@@ -35,7 +35,7 @@ The deployable static site is generated in `dist/`. Do not open it through `file
 - **Endgames:** five legal positions with concrete practice objectives. They are not represented as tablebase-certified adjudicators.
 - **Blunder Bank:** three starter mate-in-one examples plus deduplicated positions captured from completed coach analysis.
 - **Classical Masters:** five complete, legally replayable historical scores with original notes and Guess the Move.
-- **Data ownership:** IndexedDB persistence, timestamped learning history, versioned JSON backup, deduplicated merge/validated overwrite import, PGN export, and two-step data reset.
+- **Data ownership:** IndexedDB persistence, timestamped learning history, versioned JSON backup, deduplicated merge/validated overwrite import, PGN export, and two-step data reset that also removes practice recovery. Temporary recovery snapshots use local storage, expire after ten minutes, and are not included in backups.
 - **PWA:** manifest, icons, standalone display, Chromium install prompt support, versioned service-worker cache, and locally bundled runtime assets.
 
 ## Offline and mobile installation
@@ -62,15 +62,15 @@ The included workflow `.github/workflows/deploy.yml` installs pinned dependencie
 4. Run the **Build and deploy Stillpoint to GitHub Pages** workflow if it did not run automatically.
 5. Open the resulting HTTPS URL and verify the app, engine, installation prompt, and offline reentry on your own device.
 
-Vite uses `base: './'`, and runtime engine, manifest, icon, and service-worker references are relative. The static smoke test explicitly serves the build under `/sample-repository/` and checks every precached asset. An actual public Pages deployment has not been performed from this environment.
+Vite uses `base: './'`, and runtime engine, manifest, icon, and service-worker references are relative. The static smoke test explicitly serves the build under `/sample-repository/` and checks every precached asset. The Actions run and GitHub Pages environment report deployment status and the public URL.
 
 ## Verification
 
 ```sh
-npm run test:unit    # production build plus chess, learning, themes, evaluation, SRS, and backup tests
+npm run test:unit    # production build plus chess, learning, recovery validation, evaluation, SRS, and backup tests
 npm run test:static  # requires Python 3; checks subpath asset and manifest delivery
 npx playwright install chromium
-npm run test:e2e     # Chromium play, adaptive path, themes, mobile flow, and offline reload
+npm run test:e2e     # Chromium play, recovery/expiry, adaptive path, themes, mobile flow, and offline reload
 ```
 
 Or run the complete sequence:

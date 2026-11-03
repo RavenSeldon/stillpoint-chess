@@ -11,16 +11,17 @@
 
 | Check | Outcome |
 |---|---|
-| `npm run build` | PASS — strict TypeScript, Vite production bundle, generated service worker, 40 local assets precached |
-| `npm run test:unit` | PASS — 31 passed, 0 failed; includes initial perft 20/400/8902, chess rules, PGN export/reimport, data continuity, evaluation/mate parsing, SRS, knight BFS, backup validation, adaptive learning, and theme migration |
-| `npm run test:static` | PASS — all 40 assets, Stockfish WASM, manifest, and icons served beneath `/sample-repository/` |
-| `npm run test:e2e` | PASS — 8 Chromium tests passed, 0 failed/skipped |
+| `npm run build` | PASS — strict TypeScript, Vite production bundle, generated service worker, 41 local assets precached |
+| `npm run test:unit` | PASS — 36 passed, 0 failed; includes initial perft 20/400/8902, chess rules, PGN export/reimport, data continuity, evaluation/mate parsing, SRS, knight BFS, backup validation, adaptive learning, theme migration, and recovery validation/expiry |
+| `npm run test:static` | PASS — all 41 assets, Stockfish WASM, manifest, and icons served beneath `/sample-repository/` |
+| `npm run test:e2e` | PASS — 10 Chromium tests passed, 0 failed/skipped |
 | Real engine game and coach review | PASS — legal user move, real Stockfish reply, two move records, and review UI observed in Chromium |
 | Direct UCI worker check | PASS — `uci`/`uciok` and a legal `bestmove` from the bundled worker |
 | Mobile training flow | PASS at 390 × 844 — Opening Dojo, Visualization, feedback, and no main-content horizontal overflow |
 | Learning Path flow | PASS — two distinct Visualization attempts appeared in the activity trail; answered prompts locked against duplicate taps; the recommendation opened the intended exercise |
 | Four-theme flow | PASS — Indigo Focus, Lavender Paper, Forest Quiet, and Ember Study reached distinct final backgrounds after their transitions; Ember Study persisted after reload |
 | Motion and mobile navigation | PASS — view entrance ran normally; active mobile tab centered; reduced motion removed animation; Data & Privacy had no document-level horizontal overflow |
+| Practice recovery | PASS — a real two-ply game, Black orientation, Coach off, and depth 2 survived navigation and reload; an expired snapshot was removed and a fresh board shown |
 | Production animation check | PASS — moved-piece Web Animations API glide observed; reduced-motion move produced zero active animations |
 | Piece artwork and visibility modes | PASS — 32 local SVGs loaded; Ghost remained at 25% opacity; Discs and Full blindfold changed rendering as intended; accessible square labels and Standard mode remained intact |
 | Offline production reentry | PASS — service worker cached WASM and artwork; after offline reload, 32 visible/loaded SVG pieces, training, and Stockfish reply still worked |
@@ -42,10 +43,10 @@ The complete `npm run verify` sequence was executed successfully. Browser tests 
 - Added four persistent full-interface themes with migration from legacy light/dark preferences, plus validated backup merge/deduplication for learning events.
 - Prevented a single informed skill from being labelled simultaneously as both a strength and a growth edge.
 - Fixed a PGN export defect discovered during the final audit: the result had been appended twice, preventing reimport.
+- Added validated ten-minute practice recovery across navigation, reloads, and page exits; invalid or expired snapshots are removed, and clearing local progress also clears recovery.
 
 ## Not verified or intentionally not claimed
 
-- No actual public GitHub Pages deployment was performed from this environment; local subpath delivery and deployment workflow were verified only.
 - No physical phone, iOS/Safari, WebKit, low-memory device, or installed-app standalone session was tested.
 - Chromium’s native installation prompt was not accepted end-to-end; the app listens for the real prompt and provides a working action only when the browser supplies it.
 - Opening content remains a six-line starter repertoire with selected alternatives, not a complete opening tree.
