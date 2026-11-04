@@ -1,4 +1,4 @@
-# Verification record — November 3, 2026
+# Verification record — November 4, 2026
 
 ## Environment
 
@@ -11,9 +11,9 @@
 
 | Check | Outcome |
 |---|---|
-| `npm run build` | PASS — strict TypeScript, Vite production bundle, generated service worker, 43 local assets precached |
-| `npm run test:unit` | PASS — 46 passed, 0 failed; includes initial perft 20/400/8902, chess rules, English/Chinese/French/Dutch move explanations, authored-content coverage, PGN round trips, evaluation/mate parsing, SRS, knight BFS, backup/preference validation, adaptive learning, and recovery validation/expiry |
-| `npm run test:static` | PASS — all 43 assets, Stockfish WASM, manifest, and icons served beneath `/sample-repository/` |
+| `npm run build` | PASS — strict TypeScript, Vite production bundle, generated service worker, 44 local assets precached |
+| `npm run test:unit` | PASS — 51 passed, 0 failed; includes initial perft 20/400/8902, chess rules, English/Chinese/French/Dutch move explanations, authored-content coverage, PGN round trips, evaluation/mate parsing, SRS (including assisted review), knight BFS, backup/preference validation, adaptive learning (including tier-contextualized game evidence and due-blunder scheduling), and recovery validation/expiry |
+| `npm run test:static` | PASS — all 44 assets, Stockfish WASM, manifest, and icons served beneath `/sample-repository/` |
 | `npm run test:e2e` | PASS — 19 Chromium tests passed, 0 failed/skipped |
 | Real engine game and coach review | PASS — legal user move, real Stockfish reply, two move records, and review UI observed in Chromium |
 | Beginner teaching | PASS — first-game e4 action produced a real engine reply; separate learner/opponent lessons and the preferred-move explanation remained visible |
@@ -58,6 +58,19 @@ The complete `npm run verify` sequence was executed successfully. Browser tests 
 - Added a Today home that reuses the existing explainable recommendations and resumes an unfinished practice without duplicating game state.
 - Added browser-specific installation instructions, four live diagnostics, visible outcomes, and a strict distinction between prompt acceptance and browser-confirmed installation.
 
+## Corrections from the November 4, 2026 review
+
+- Coach grading now compares the preferred continuation and the played continuation from the SAME position under identical search limits, instead of pairing a pre-move line with a separate post-move search. Shallow searches are reported as limited evidence rather than dressed up as blunder labels.
+- The preferred-move arrow no longer appears over the wrong position. A “Review decision” control restores the exact position in which the alternative was found and draws the arrow there; turning points in the review card offer the same in-position view.
+- Opening recall distinguishes independent recall, assisted recall (hints used), and attempts with errors. Only independent recall advances mastery; assisted completions schedule an independent retry and are recorded as their own evidence type.
+- Every endgame drill declares a measurable success condition (promotion, checkmate, draw, or win) and completion is judged against that condition rather than the bare game result.
+- Blunder repair accepts any verified checkmate and engine-verified equivalent continuations under identical search limits; without the engine it says plainly that only the stored move can be checked. Personal blunders now carry spaced-review scheduling, and due patterns surface first in recommendations.
+- Practice-game evidence is read against the recorded opponent tier, so results against different strengths are no longer averaged as if they were equal tasks.
+- Games finished with Live Coach off can be analyzed afterward, move by move, with the same comparison the live coach uses; verified blunders flow into the Blunder Bank.
+- Pawn promotion now asks which piece to promote to (queen, rook, bishop, or knight) instead of silently defaulting to a queen, with keyboard access and Escape to cancel.
+- Keyboard focus is preserved across re-renders of both the app shell and the board.
+- The document language stays English; only translated lesson and guide sections carry their own `lang` tags, instead of retagging the whole untranslated interface.
+
 ## Not verified or intentionally not claimed
 
 - Simplified Chinese, French, and Dutch localization is intentionally partial: authored opening/master notes and the wider interface remain English.
@@ -67,5 +80,5 @@ The complete `npm run verify` sequence was executed successfully. Browser tests 
 - Opening content remains a six-line starter repertoire with selected alternatives, not a complete opening tree.
 - Calculation exercises are opening-memory sequences, not certified unique tactical puzzles.
 - Endgames use practice objectives without tablebase-certified WDL claims.
-- Review covers learner moves analyzed with Coach enabled, not every move of a completed game.
+- Review covers the learner’s moves, live or via post-game analysis; engine replies are not graded.
 - No calibrated Elo, Lichess game accuracy, screen-reader certification, or universal browser compatibility is claimed.

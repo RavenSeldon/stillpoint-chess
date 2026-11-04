@@ -9,3 +9,10 @@ export function review(prev:SRS,correct:boolean,now=Date.now()):SRS{
  p.nextDueTimestamp=now+p.intervalDays*86400000;return p;
 }
 export function due(s:SRS,now=Date.now()){return s.nextDueTimestamp<=now}
+/** Assisted recall is honest evidence of dependence: count the attempt, hold mastery steady, and revisit soon. */
+export function reviewAssisted(prev:SRS,now=Date.now()):SRS{
+ const p={...prev,attempts:prev.attempts+1};
+ p.intervalDays=1;p.easeFactor=Math.max(1.3,prev.easeFactor-.1);
+ p.masteryPercent=prev.masteryPercent;
+ p.nextDueTimestamp=now+p.intervalDays*86400000;return p;
+}

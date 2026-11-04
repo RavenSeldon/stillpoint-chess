@@ -1338,3 +1338,75 @@ body[data-text-size="large"] .coach-preferred,
 body[data-text-size="large"] .move-lesson ul { font-size: inherit; }
 body[data-text-size="large"] .nav-link { font-size: 15px; }
 body[data-text-size="large"] .nav-bottom small { font-size: 14px; }
+
+/* Promotion chooser: underpromotion is real chess, so the board asks instead of assuming a queen. */
+.promotion-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: color-mix(in srgb, var(--board-dark, #10131f) 62%, transparent);
+  backdrop-filter: blur(2px);
+}
+.promotion-title {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 1px 4px #0009;
+}
+.promotion-choices {
+  display: flex;
+  gap: 10px;
+}
+.promotion-choice {
+  width: clamp(48px, 12%, 76px);
+  aspect-ratio: 1;
+  padding: 6px;
+  border: 2px solid #ffffff55;
+  border-radius: 12px;
+  background: #fffffff2;
+  cursor: pointer;
+}
+.promotion-choice img { width: 100%; height: 100%; }
+.promotion-choice:hover, .promotion-choice:focus-visible {
+  border-color: #45e5dd;
+  outline: none;
+  transform: translateY(-2px);
+}
+.promotion-cancel {
+  border: 1px solid #ffffff66;
+  border-radius: 999px;
+  padding: 6px 18px;
+  background: #0006;
+  color: #fff;
+  cursor: pointer;
+}
+.promotion-cancel:hover, .promotion-cancel:focus-visible { border-color: #fff; outline: none; }
+
+/* Decision review: the preferred-move arrow belongs to the position it was found in. */
+.decision-note {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-left: 3px solid #45e5dd;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  font-size: 14px;
+}
+
+/* Spaced review markers. */
+.due-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}

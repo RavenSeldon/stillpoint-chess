@@ -19,14 +19,17 @@ export type BoardOptions = {
 export class BoardView {
   private selected: string | null = null;
   private fromDrag: string | null = null;
+  private pendingPromotion: { from: string; to: string; moves: { uci: string; san: string }[] } | null = null;
 
   constructor(private root: HTMLElement) {}
 
   clearSelection() {
     this.selected = null;
+    this.pendingPromotion = null;
   }
 
   render(game: Chess, options: BoardOptions = {}) {
+    const focusedSquare = (this.root.ownerDocument.activeElement as HTMLElement | null)?.dataset?.square || null;
     this.root.replaceChildren();
     const orientation = options.orientation || "w";
     const grid = document.createElement("div");
@@ -110,8 +113,13 @@ export class BoardView {
             const matches = legal.filter(
               (move) => move.uci.slice(0, 2) === from && move.uci.slice(2, 4) === square,
             );
+            if (matches.length > 1) {
+              this.pendingPromotion = { from, to: square, moves: matches };
+              this.render(game, options);
+              return;
+            }
             if (matches.length) {
-              options.onMove(matches.find((move) => move.uci.endsWith("q"))?.uci || matches[0].uci);
+              options.onMove(matches[0].uci);
               return;
             }
           }
@@ -133,12 +141,21 @@ export class BoardView {
         this.fromDrag = null;
         if (!from || !options.onMove) return;
         const moves = legal.filter((move) => move.uci.slice(0, 2) === from && move.uci.slice(2, 4) === square);
-        if (moves.length) options.onMove(moves.find((move) => move.uci.endsWith("q"))?.uci || moves[0].uci);
+        if (moves.length > 1) {
+          this.pendingPromotion = { from, to: square, moves };
+          this.render(game, options);
+          return;
+        }
+        if (moves.length) options.onMove(moves[0].uci);
       };
       grid.append(button);
     }
     this.root.append(grid);
+    if (focusedSquare)
+      grid.querySelector<HTMLElement>(`[data-square="${focusedSquare}"]`)?.focus();
     this.animateMove(grid, game.fen(), options.lastMove);
+    if (this.pendingPromotion && options.interactive && options.onMove)
+      this.renderPromotionChooser(game, options);
 
     if (options.arrow && /^[a-h][1-8][a-h][1-8]/.test(options.arrow.uci)) {
       const from = idx(options.arrow.uci.slice(0, 2));
@@ -180,6 +197,57 @@ export class BoardView {
       svg.append(line);
       this.root.append(svg);
     }
+  }
+
+  /** Underpromotion is real chess: always ask, never silently default to a queen. */
+  private renderPromotionChooser(game: Chess, options: BoardOptions) {
+    const pending = this.pendingPromotion!;
+    const names: Record<string, string> = { q: "queen", r: "rook", b: "bishop", n: "knight" };
+    const overlay = document.createElement("div");
+    overlay.className = "promotion-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-label", `Choose the piece to promote to on ${pending.to}`);
+    const title = document.createElement("p");
+    title.className = "promotion-title";
+    title.textContent = `Promote on ${pending.to}`;
+    overlay.append(title);
+    const row = document.createElement("div");
+    row.className = "promotion-choices";
+    const finish = (uci: string | null) => {
+      this.pendingPromotion = null;
+      if (uci) options.onMove!(uci);
+      else this.render(game, options);
+    };
+    for (const piece of ["q", "r", "b", "n"]) {
+      const move = pending.moves.find((candidate) => candidate.uci.endsWith(piece));
+      if (!move) continue;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "promotion-choice";
+      button.setAttribute("aria-label", `Promote to ${names[piece]}`);
+      const image = document.createElement("img");
+      image.src = new URL(`pieces/${game.turn}${piece.toUpperCase()}.svg`, document.baseURI).href;
+      image.alt = "";
+      image.draggable = false;
+      button.append(image);
+      button.onclick = () => finish(move.uci);
+      row.append(button);
+    }
+    overlay.append(row);
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "promotion-cancel";
+    cancel.textContent = "Cancel";
+    cancel.onclick = () => finish(null);
+    overlay.append(cancel);
+    overlay.onkeydown = (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        finish(null);
+      }
+    };
+    this.root.append(overlay);
+    overlay.querySelector<HTMLElement>(".promotion-choice")?.focus();
   }
 
   private animateMove(grid: HTMLDivElement, fen: string, lastMove?: string) {

@@ -23,6 +23,9 @@ export type Blunder = {
   title: string;
   lesson?: string;
   timestamp?: number;
+  /** Spaced-review state; absent on legacy records until their first scheduled solve. */
+  intervalDays?: number;
+  nextDueTimestamp?: number;
 };
 export type SavedGame = {
   id: string;
@@ -31,6 +34,8 @@ export type SavedGame = {
   result: string;
   playerSide: "w" | "b";
   mode?: "play" | "endgame";
+  /** Opponent tier (1–6) so outcomes are read against difficulty, not flat averages. */
+  strength?: number;
 };
 export type SaveState = {
   version: 1;
@@ -101,7 +106,7 @@ export function validateSave(data: unknown): SaveState {
   if (!Array.isArray(x.games) || x.games.length > 2000) throw Error("Invalid games list");
   p.games = x.games.map((raw: unknown) => {
     const g = raw as SavedGame;
-    if (!g || typeof g.id !== "string" || typeof g.pgn !== "string" || typeof g.date !== "number" || !["w", "b"].includes(g.playerSide) || typeof g.result !== "string" || (g.mode !== undefined && !["play", "endgame"].includes(g.mode))) throw Error("Invalid game");
+    if (!g || typeof g.id !== "string" || typeof g.pgn !== "string" || typeof g.date !== "number" || !["w", "b"].includes(g.playerSide) || typeof g.result !== "string" || (g.mode !== undefined && !["play", "endgame"].includes(g.mode)) || (g.strength !== undefined && (!Number.isInteger(g.strength) || g.strength < 1 || g.strength > 6))) throw Error("Invalid game");
     new Chess().loadPgn(g.pgn);
     return { ...g };
   });
@@ -109,7 +114,7 @@ export function validateSave(data: unknown): SaveState {
   if (!Array.isArray(x.blunders) || x.blunders.length > 3000) throw Error("Invalid blunders");
   p.blunders = x.blunders.map((raw: unknown) => {
     const b = raw as Blunder;
-    if (!b || typeof b.id !== "string" || typeof b.fen !== "string" || typeof b.best !== "string" || typeof b.bad !== "string" || !Number.isInteger(b.solved) || b.solved < 0 || typeof b.starter !== "boolean" || typeof b.title !== "string" || (b.lesson !== undefined && (typeof b.lesson !== "string" || b.lesson.length > 1200))) throw Error("Invalid blunder");
+    if (!b || typeof b.id !== "string" || typeof b.fen !== "string" || typeof b.best !== "string" || typeof b.bad !== "string" || !Number.isInteger(b.solved) || b.solved < 0 || typeof b.starter !== "boolean" || typeof b.title !== "string" || (b.lesson !== undefined && (typeof b.lesson !== "string" || b.lesson.length > 1200)) || (b.intervalDays !== undefined && (!Number.isFinite(b.intervalDays) || b.intervalDays < 0 || b.intervalDays > 365)) || (b.nextDueTimestamp !== undefined && (!Number.isFinite(b.nextDueTimestamp) || b.nextDueTimestamp < 0))) throw Error("Invalid blunder");
     const test = new Chess(b.fen);
     test.move(b.best);
     new Chess(b.fen).move(b.bad);

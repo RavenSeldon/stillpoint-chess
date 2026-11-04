@@ -25,7 +25,7 @@ import {
   type Theme,
 } from "../core/storage/db.js";
 import { PRACTICE_RECOVERY_KEY, parsePracticeRecovery } from "../core/storage/recovery.js";
-import { freshSrs, due, review } from "../core/srs/scheduler.js";
+import { freshSrs, due, review, reviewAssisted } from "../core/srs/scheduler.js";
 import { buildLearningProfile, type Recommendation } from "../core/learning/engine.js";
 import { explainMove } from "../core/learning/explanations.js";
 import { guideCopy, languageNames, languageTags, lessonCopy, lessonLanguages, starterLessons, type LessonLanguage } from "../core/learning/languages.js";
@@ -87,9 +87,12 @@ type ReviewEntry = {
   fenBefore: string;
   played: string;
   best: string | null;
+  bestUci: string | null;
   loss: number;
   grade: Grade;
   whiteCp: number;
+  /** True when the search was too shallow to justify a confident label. */
+  unverified?: boolean;
 };
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -156,9 +159,16 @@ export class App {
   private openingIndex = 0;
   private openingCorrect = 0;
   private openingErrors = 0;
+  private openingHints = 0;
   private openingRecorded = false;
   private openingFeedback = "";
   private openingLastSan = "";
+  private decisionReview: { fen: string; uci: string; played: string; best: string } | null = null;
+  private decisionView = false;
+  private analyzing = false;
+  private analysisProgress = "";
+  private blunderBusy = false;
+  private blunderHinted = false;
   private gym: "coordinates" | "color" | "knight" | "calculation" =
     "coordinates";
   private sprintRemaining = 60;
@@ -434,7 +444,7 @@ export class App {
     try {
       const copy = lessonCopy[this.state.settings.language];
       const lesson = explainMove(before, move, this.state.settings.language);
-      return `<section class="move-lesson" aria-label="${esc(copy.explanation)}"><span class="overline">${esc(copy.readMove)}</span><p class="move-reading">${esc(lesson.reading)}</p>${purpose ? `<p class="move-purpose"><b>${esc(copy.why)}</b> ${esc(purpose)}</p>` : ""}<ul>${lesson.reasons.map((reason) => `<li>${esc(reason)}</li>`).join("")}</ul></section>`;
+      return `<section class="move-lesson" lang="${esc(languageTags[this.state.settings.language])}" aria-label="${esc(copy.explanation)}"><span class="overline">${esc(copy.readMove)}</span><p class="move-reading">${esc(lesson.reading)}</p>${purpose ? `<p class="move-purpose"><b>${esc(copy.why)}</b> ${esc(purpose)}</p>` : ""}<ul>${lesson.reasons.map((reason) => `<li>${esc(reason)}</li>`).join("")}</ul></section>`;
     } catch {
       return "";
     }
@@ -459,7 +469,7 @@ export class App {
   private beginnerGuide() {
     if (!this.state.settings.guidance || this.game.history.length || this.player !== "w") return "";
     const copy = guideCopy[this.state.settings.language];
-    return `<section class="beginner-guide" aria-labelledby="beginner-guide-title"><div class="guide-topline"><span class="overline">${esc(copy.overline)}</span><button type="button" class="guide-close" data-guidance-off aria-label="${esc(copy.hideAria)}">×</button></div>${this.languageControl("guide-language")}<h2 id="beginner-guide-title">${esc(copy.title)}</h2><p><b>${esc(copy.goalLead)}</b> ${esc(copy.goal)}</p><ol class="beginner-steps"><li><b>${esc(copy.whiteLead)}</b> ${esc(copy.white)}</li><li><b>${esc(copy.tapLead)}</b> ${esc(copy.tap)}</li><li><b>${esc(copy.tryLead)}</b> ${esc(copy.tryText)}</li></ol><div class="button-row">${btn("beginner-e4", esc(copy.tryButton), "primary")}<button type="button" class="btn" data-guidance-off>${esc(copy.hide)}</button></div><p class="helper">${esc(copy.helper)}</p></section>`;
+    return `<section class="beginner-guide" lang="${esc(languageTags[this.state.settings.language])}" aria-labelledby="beginner-guide-title"><div class="guide-topline"><span class="overline">${esc(copy.overline)}</span><button type="button" class="guide-close" data-guidance-off aria-label="${esc(copy.hideAria)}">×</button></div>${this.languageControl("guide-language")}<h2 id="beginner-guide-title">${esc(copy.title)}</h2><p><b>${esc(copy.goalLead)}</b> ${esc(copy.goal)}</p><ol class="beginner-steps"><li><b>${esc(copy.whiteLead)}</b> ${esc(copy.white)}</li><li><b>${esc(copy.tapLead)}</b> ${esc(copy.tap)}</li><li><b>${esc(copy.tryLead)}</b> ${esc(copy.tryText)}</li></ol><div class="button-row">${btn("beginner-e4", esc(copy.tryButton), "primary")}<button type="button" class="btn" data-guidance-off>${esc(copy.hide)}</button></div><p class="helper">${esc(copy.helper)}</p></section>`;
   }
   private openingLesson(index: number, san = this.currentOpening().moves[index]) {
     const line = this.currentOpening();
@@ -489,10 +499,14 @@ export class App {
     document.body.dataset.theme = settings.theme;
     document.body.dataset.textSize = settings.largeText ? "large" : "standard";
     document.body.dataset.motion = settings.reduceMotion ? "reduce" : "system";
-    document.documentElement.lang = languageTags[settings.language];
+    // The interface is English; only translated lesson sections carry their own lang tag.
+    document.documentElement.lang = "en";
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColors[settings.theme]);
   }
   private render() {
+    const activeElement = document.activeElement as HTMLElement | null;
+    const restoreId = activeElement?.id || null;
+    const restoreSquare = activeElement?.dataset?.square || null;
     this.applyTheme();
     const active = nav.find((n) => n[0] === this.view);
     this.root.innerHTML = `<div class="app-shell"><aside class="navigation"><div class="brand"><div class="brand-symbol">♔</div><div><div class="brand-title">STILLPOINT</div><div class="brand-subtitle">A CHESS PRACTICE</div></div></div><div class="nav-caption">YOUR PRACTICE</div><nav aria-label="Main navigation">${nav.map(([id, label, glyph]) => `<button class="nav-link ${id === this.view ? "active" : ""}" data-view="${id}" type="button" ${id === this.view ? 'aria-current="page"' : ""}><span class="nav-glyph" aria-hidden="true">${glyph}</span>${label}</button>`).join("")}</nav><div class="nav-bottom"><div class="practice-line">道 · 愛 · 不二</div><small>Truth on the board.<br>Progress stays on this device.</small></div></aside><main id="main-content" class="main-content" tabindex="-1">${this.renderMain()}</main><div id="live" class="sr-only" aria-live="polite" aria-atomic="true">${esc(this.announcements)}</div></div>`;
@@ -538,6 +552,9 @@ export class App {
         this.wireSettings();
         break;
     }
+    // Re-rendering replaces the DOM; hand keyboard focus back to the control it was on.
+    if (restoreId) $(restoreId)?.focus();
+    else if (restoreSquare) this.root.querySelector<HTMLElement>(`[data-square="${restoreSquare}"]`)?.focus();
   }
   private renderMain() {
     switch (this.view) {
@@ -621,7 +638,9 @@ export class App {
       const age = Math.max(0, Date.now() - attempt.timestamp);
       const when = age < 60_000 ? "just now" : age < 3_600_000 ? `${Math.floor(age / 60_000)} min ago` : age < 86_400_000 ? `${Math.floor(age / 3_600_000)} hr ago` : `${Math.floor(age / 86_400_000)} d ago`;
       const skill = profile.skills.find((item) => item.id === attempt.area)!;
-      return `<div class="activity-row"><span><b>${esc(skill.label)}</b><small>${esc(attempt.key)}</small></span><span class="activity-result ${attempt.correct ? "positive" : ""}">${attempt.correct ? "Completed" : "Review"} · ${when}</span></div>`;
+      const assisted = attempt.key.endsWith("#assisted");
+      const keyLabel = assisted ? attempt.key.slice(0, -"#assisted".length) : attempt.key;
+      return `<div class="activity-row"><span><b>${esc(skill.label)}</b><small>${esc(keyLabel)}</small></span><span class="activity-result ${attempt.correct ? "positive" : ""}">${assisted ? "Assisted" : attempt.correct ? "Completed" : "Review"} · ${when}</span></div>`;
     }).join("") : `<p class="helper">Your completed exercises will appear here. Nothing leaves this device.</p>`;
     return `<div class="workspace-heading"><div><span class="overline">YOUR LEARNING PATH</span><h1>Practice what matters next</h1><p>A changing plan shaped by your games, recall, mistakes, and training history.</p></div><span class="current-mode">LOCAL & EXPLAINABLE <span class="status-dot"></span></span></div>
       <div class="path-overview"><section class="panel path-intro"><span class="overline">A LIVING PRACTICE</span><h2>${profile.recordedAttempts ? "Your path is adapting" : "Begin with a gentle baseline"}</h2><p>${insight}</p><div class="metrics wide"><div><b>${profile.recentAttempts}</b><small>Attempts · 7 days</small></div><div><b>${this.state.games.filter((game) => !game.mode || game.mode === "play").length}</b><small>Practice games</small></div><div><b>${Object.values(this.state.srs).filter((item) => due(item)).length}</b><small>Lines due</small></div></div></section>
@@ -645,6 +664,7 @@ export class App {
       this.openingIndex = 0;
       this.openingCorrect = 0;
       this.openingErrors = 0;
+      this.openingHints = 0;
       this.openingRecorded = false;
       this.openingFeedback = "";
       this.openingLastSan = "";
@@ -675,7 +695,7 @@ export class App {
       const y = 34 - Math.max(-1000, Math.min(1000, item.whiteCp)) / 1000 * 25;
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(" ");
-    return `<div class="section-rule"></div><div class="review-card"><h3>Your review</h3><p class="helper">Estimated mean move accuracy ${average.toFixed(0)}% · ${this.reviews.filter(item => item.grade === "Blunder").length} blunder(s). The graph shows your reviewed positions from White’s perspective.</p><svg class="eval-chart" viewBox="0 0 240 68" role="img" aria-label="Evaluation trace for your reviewed moves"><line x1="0" y1="34" x2="240" y2="34" class="eval-zero"/><polyline points="${points}" class="eval-line"/></svg><h3>Largest turning points</h3>${critical.map(item => `<div class="critical-row"><span><b>${esc(item.played)}</b> · ${item.grade} · −${item.loss.toFixed(1)} pp${item.best ? ` · Preferred ${esc(item.best)}` : ""}</span><button class="btn" type="button" data-practice="${esc(item.fenBefore)}">Practice</button></div>`).join("")}</div>`;
+    return `<div class="section-rule"></div><div class="review-card"><h3>Your review</h3><p class="helper">Estimated mean move accuracy ${average.toFixed(0)}% · ${this.reviews.filter(item => item.grade === "Blunder").length} blunder(s). Both continuations were searched from the same position under identical limits. The graph shows your reviewed positions from White’s perspective.</p><svg class="eval-chart" viewBox="0 0 240 68" role="img" aria-label="Evaluation trace for your reviewed moves"><line x1="0" y1="34" x2="240" y2="34" class="eval-zero"/><polyline points="${points}" class="eval-line"/></svg><h3>Largest turning points</h3>${critical.map(item => `<div class="critical-row"><span><b>${esc(item.played)}</b> · ${item.unverified ? "Limited evidence" : item.grade} · −${item.loss.toFixed(1)} pp${item.best ? ` · Preferred ${esc(item.best)}` : ""}</span>${item.bestUci ? `<button class="btn" type="button" data-decision="${this.reviews.indexOf(item)}">Review</button>` : ""}<button class="btn" type="button" data-practice="${esc(item.fenBefore)}">Practice</button></div>`).join("")}</div>`;
   }
 
   // Play against the local Stockfish worker.
@@ -712,7 +732,7 @@ export class App {
    <label class="check-line"><input id="coach-toggle" type="checkbox" ${this.coach ? "checked" : ""}> Live coach · experimental search evaluation</label>`;
     const side = this.beginnerGuide() + this.panel(
       "Your table",
-      `${settings}<div class="button-row">${btn("new-game", "New game", "primary")}${btn("flip-board", "Flip board")}</div><div class="button-row">${this.selectedTime === "zen" ? btn("takeback", "Takeback") : ""}${btn("resign", "Resign")}${btn("claim-draw", "Claim draw")}</div><div class="button-row">${this.boardBlind === "blindfold" ? btn("peek", "Peek for 3s") : ""}${btn("export-pgn", "Export PGN")}</div><div class="section-rule"></div><label for="move-input" class="overline">MOVE INPUT</label><form id="move-form" class="inline-form"><input id="move-input" aria-label="Enter move in algebraic notation" placeholder="e4, Nf3, e2e4…" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="send"><button type="submit" class="btn primary">Play</button></form><p class="helper">Tap two squares, drag a piece, or enter SAN/UCI.</p><details class="setup-details"><summary>Load custom FEN or PGN</summary><textarea id="setup-text" rows="3" aria-label="Custom FEN or PGN" placeholder="Paste a valid FEN or PGN here"></textarea>${btn("load-setup", "Load position")}</details><div class="section-rule"></div><h3>Coach’s observation</h3><p class="coach-box">${esc(this.coachMessage || "After your move, local Stockfish compares the preferred continuation with the resulting position. Evaluations are estimates, not explanations of human intent.")}</p>${this.state.settings.guidance && this.coachLesson ? `<p class="coach-preferred"><b>Preferred move, in plain language:</b> ${esc(this.coachLesson)}</p>` : ""}${this.latestMoveLesson()}<div class="section-rule"></div><h3>Move record</h3><div class="move-history">${moveList || '<span class="muted">The first move is yours.</span>'}</div>${result ? `<p class="result-line">Game ended: ${result}</p>` : ""}${this.reviewHtml()}`,
+      `${settings}<div class="button-row">${btn("new-game", "New game", "primary")}${btn("flip-board", "Flip board")}</div><div class="button-row">${this.selectedTime === "zen" ? btn("takeback", "Takeback") : ""}${btn("resign", "Resign")}${btn("claim-draw", "Claim draw")}</div><div class="button-row">${this.boardBlind === "blindfold" ? btn("peek", "Peek for 3s") : ""}${btn("export-pgn", "Export PGN")}</div><div class="section-rule"></div><label for="move-input" class="overline">MOVE INPUT</label><form id="move-form" class="inline-form"><input id="move-input" aria-label="Enter move in algebraic notation" placeholder="e4, Nf3, e2e4…" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="send"><button type="submit" class="btn primary">Play</button></form><p class="helper">Tap two squares, drag a piece, or enter SAN/UCI.</p><details class="setup-details"><summary>Load custom FEN or PGN</summary><textarea id="setup-text" rows="3" aria-label="Custom FEN or PGN" placeholder="Paste a valid FEN or PGN here"></textarea>${btn("load-setup", "Load position")}</details><div class="section-rule"></div><h3>Coach’s observation</h3><p class="coach-box">${esc(this.coachMessage || "After your move, local Stockfish compares your move with its preferred continuation from the same position, under identical search limits. Evaluations are estimates, not explanations of human intent.")}</p>${this.analyzing ? `<p class="coach-box"><span id="analysis-progress">${esc(this.analysisProgress)}</span></p><div class="button-row">${btn("analyze-cancel", "Stop analysis")}</div>` : ""}${this.decisionReview ? this.decisionView ? `<p class="decision-note">Showing the position before ${esc(this.decisionReview.played)}; the arrow marks the preferred ${esc(this.decisionReview.best)}.</p><div class="button-row">${btn("decision-back", "Back to the current position", "primary")}</div>` : `<div class="button-row">${btn("decision-show", `Review decision · see ${esc(this.decisionReview.best)}`)}</div>` : ""}${result && !this.reviews.length && !this.analyzing ? `<div class="button-row">${btn("analyze-game", "Analyze this game")}</div><p class="helper">Runs the same comparison the live coach uses, for every move you played. Nothing leaves this device.</p>` : ""}${this.state.settings.guidance && this.coachLesson ? `<p class="coach-preferred" lang="${esc(languageTags[this.state.settings.language])}"><b>Preferred move, in plain language:</b> ${esc(this.coachLesson)}</p>` : ""}${this.latestMoveLesson()}<div class="section-rule"></div><h3>Move record</h3><div class="move-history">${moveList || '<span class="muted">The first move is yours.</span>'}</div>${result ? `<p class="result-line">Game ended: ${result}</p>` : ""}${this.reviewHtml()}`,
       "PRACTICE AGAINST THE ENGINE",
     );
     return this.layout(
@@ -739,6 +759,9 @@ export class App {
     this.coachLesson = "";
     this.reviews = [];
     this.lastArrow = null;
+    this.decisionReview = null;
+    this.decisionView = false;
+    this.analyzing = false;
     this.status = "New game. Your move.";
     const tc = parseTime(this.selectedTime);
     this.clocks = tc?.remaining || [0, 0];
@@ -785,15 +808,125 @@ export class App {
       result,
       playerSide: this.player,
       mode: this.playMode,
+      strength: this.playMode === "play" ? this.depth : undefined,
     });
     this.state.games = this.state.games.slice(0, 200);
     if (this.playMode === "endgame") {
+      // Grade against the drill's stated objective, not just the bare game result.
+      const drill = endgames.find((item) => item.id === this.endgameId);
       const won = (result === "1-0" && this.player === "w") || (result === "0-1" && this.player === "b");
-      const achievedDraw = this.endgameId === "philidor" && result === "1/2-1/2";
-      this.recordLearning("endgames", won || achievedDraw, this.endgameId);
+      const mated = won && this.game.history.at(-1)?.san.includes("#") === true;
+      const promoted = this.game.history.some(
+        (move) => move.uci.length === 5 && move.before.split(" ")[1] === this.player,
+      );
+      const achieved = drill
+        ? drill.success === "promote"
+          ? promoted || mated
+          : drill.success === "mate"
+            ? mated
+            : drill.success === "draw"
+              ? result === "1/2-1/2"
+              : won
+        : won;
+      this.recordLearning("endgames", achieved, this.endgameId);
+      this.status = `${text} · Objective ${achieved ? "met" : "not met"}: ${drill?.goal || "win the position"}`;
     }
     this.saveSoon();
     this.savePracticeRecovery();
+  }
+  /**
+   * Grade one of the player's moves honestly: the preferred continuation and the
+   * played continuation are searched from the SAME position under identical
+   * limits, so the comparison never mixes unequal evidence. Shallow searches are
+   * flagged unverified instead of being dressed up as verdicts.
+   */
+  private async gradePlayerMove(before: string, rec: { uci: string; san: string }, afterFen: string, rev: number) {
+    const side = before.split(" ")[1] as Color;
+    const best = await this.engine.evaluatePosition(before, 2);
+    if (rev !== this.revision || !best.complete) return null;
+    const played = await this.engine.evaluatePosition(afterFen, 2);
+    if (rev !== this.revision || !played.complete) return null;
+    let winBest = 0;
+    let bestScore: Score = played.score;
+    if (best.bestMove && best.bestMove !== rec.uci) {
+      const bestGame = new Chess(before);
+      bestGame.move(best.bestMove);
+      const afterBest = await this.engine.evaluatePosition(bestGame.fen(), 2);
+      if (rev !== this.revision || !afterBest.complete) return null;
+      winBest = cpToWinProbability(scoreForSide(afterBest.score, side));
+      bestScore = afterBest.score;
+    } else {
+      // The played move IS the engine's first choice: loss is zero by construction.
+      winBest = cpToWinProbability(scoreForSide(played.score, side));
+    }
+    const winPlayed = cpToWinProbability(scoreForSide(played.score, side));
+    const loss = Math.max(0, winBest - winPlayed);
+    const unverified = best.depth < 4 || played.depth < 4;
+    const entry: ReviewEntry = {
+      ply: 0,
+      fenBefore: before,
+      played: rec.san,
+      best: best.san,
+      bestUci: best.bestMove,
+      loss,
+      grade: classify(loss),
+      whiteCp: played.scoreCp,
+      unverified,
+    };
+    return { entry, bestScore, playedScore: played.score };
+  }
+  private captureBlunder(before: string, playedSan: string, bestUci: string) {
+    if (this.state.blunders.some((item) => item.fen === before && !item.starter)) return;
+    const bestMove = new Chess(before).move(bestUci);
+    this.state.blunders.unshift({
+      id: crypto.randomUUID(),
+      fen: before,
+      bad: playedSan,
+      best: bestMove.san,
+      solved: 0,
+      starter: false,
+      title: "Your game · " + new Date().toLocaleDateString(),
+      lesson: explainMove(before, bestMove).reasons.join(" "),
+      timestamp: Date.now(),
+      intervalDays: 0,
+      nextDueTimestamp: Date.now(),
+    });
+    this.state.blunders = this.state.blunders.slice(0, 500);
+    this.saveSoon();
+  }
+  /** Post-game review for games played with the live coach off: analyze after play, retrieve before reveal. */
+  private async analyzeFinishedGame() {
+    if (this.analyzing || !this.gameResult && !this.game.result()) return;
+    const rev = ++this.revision;
+    this.analyzing = true;
+    this.render();
+    const moves = this.game.history.filter((move) => move.before.split(" ")[1] === this.player);
+    try {
+      for (let i = 0; i < moves.length; i++) {
+        if (rev !== this.revision) return;
+        this.analysisProgress = `Analyzing your move ${i + 1} of ${moves.length}: ${moves[i].san}…`;
+        const node = $("analysis-progress");
+        if (node) node.textContent = this.analysisProgress;
+        const graded = await this.gradePlayerMove(moves[i].before, moves[i], moves[i].after, rev);
+        if (rev !== this.revision) return;
+        if (graded) {
+          graded.entry.ply = this.game.history.indexOf(moves[i]) + 1;
+          this.reviews.push(graded.entry);
+          if (!graded.entry.unverified && graded.entry.grade === "Blunder" && graded.entry.bestUci && graded.entry.bestUci !== moves[i].uci)
+            this.captureBlunder(moves[i].before, moves[i].san, graded.entry.bestUci);
+        }
+      }
+      this.coachMessage = `Post-game review complete: ${this.reviews.length} of your moves were compared against the preferred continuation under identical search limits.`;
+      this.announce(this.coachMessage);
+    } catch {
+      if (rev === this.revision) this.coachMessage = "Analysis interrupted; any completed comparisons are kept below.";
+    } finally {
+      if (rev === this.revision) {
+        this.analyzing = false;
+        this.analysisProgress = "";
+        this.render();
+      }
+    }
   }
   private async makePlayMove(uciOrSan: string) {
     if (this.thinking || this.gameResult || this.game.result()) {
@@ -815,6 +948,8 @@ export class App {
     }
     this.lastArrow = null;
     this.coachLesson = "";
+    this.decisionReview = null;
+    this.decisionView = false;
     this.status = `You played ${rec.san}`;
     if (this.selectedTime !== "zen")
       this.clocks[side === "w" ? 0 : 1] += this.increment;
@@ -824,48 +959,23 @@ export class App {
     if (this.coach) {
       this.thinking = true;
       try {
-        const best = await this.engine.evaluatePosition(before, 2);
-        if (rev !== this.revision || !best.complete) return;
-        const after = this.game.fen();
-        const played = await this.engine.evaluatePosition(after, 2);
-        if (rev !== this.revision || !played.complete) return;
-        const winBest = cpToWinProbability(scoreForSide(best.score, side));
-        const winPlayed = cpToWinProbability(scoreForSide(played.score, side));
-        const loss = Math.max(0, winBest - winPlayed);
-        const grade = classify(loss);
-        this.reviews.push({
-          ply: this.game.history.length,
-          fenBefore: before,
-          played: rec.san,
-          best: best.san,
-          loss,
-          grade,
-          whiteCp: played.scoreCp,
-        });
-        this.coachMessage = `${grade} · estimated −${loss.toFixed(1)} percentage points · ${moveAccuracy(loss).toFixed(0)}% estimated move accuracy. Preferred ${best.san || "none"} (${scoreText(best.score, side)}); after ${rec.san}: ${scoreText(played.score, side)}.`;
-        if (best.san) {
+        const graded = await this.gradePlayerMove(before, rec, this.game.fen(), rev);
+        if (rev !== this.revision || !graded) return;
+        const { entry, bestScore, playedScore } = graded;
+        entry.ply = this.game.history.length;
+        this.reviews.push(entry);
+        this.coachMessage = entry.unverified
+          ? `Limited evidence: the search stayed shallow, so no confident classification. Stockfish’s first choice was ${entry.best || "none"}; both continuations were compared from your position under identical limits.`
+          : `${entry.grade} · estimated −${entry.loss.toFixed(1)} percentage points · ${moveAccuracy(entry.loss).toFixed(0)}% estimated move accuracy. Preferred ${entry.best || "none"} (${scoreText(bestScore, side)}); after ${rec.san}: ${scoreText(playedScore, side)}.`;
+        if (entry.best) {
           const language = this.state.settings.language;
-          const preferred = explainMove(before, best.san, language);
+          const preferred = explainMove(before, entry.best, language);
           this.coachLesson = `${preferred.reading} ${preferred.reasons.join(" ")} ${lessonCopy[language].preferredSuffix}`;
         }
-        if (best.bestMove && best.bestMove !== rec.uci) {
-          this.lastArrow = { uci: best.bestMove, color: "green" };
-          if (grade === "Blunder" && !this.state.blunders.some(item => item.fen === before && !item.starter)) {
-            const bestMove = new Chess(before).move(best.bestMove);
-            this.state.blunders.unshift({
-              id: crypto.randomUUID(),
-              fen: before,
-              bad: rec.san,
-              best: bestMove.san,
-              solved: 0,
-              starter: false,
-              title: "Your game · " + new Date().toLocaleDateString(),
-              lesson: explainMove(before, bestMove).reasons.join(" "),
-              timestamp: Date.now(),
-            });
-            this.state.blunders = this.state.blunders.slice(0, 500);
-            this.saveSoon();
-          }
+        if (entry.bestUci && entry.bestUci !== rec.uci) {
+          this.decisionReview = { fen: before, uci: entry.bestUci, played: rec.san, best: entry.best || "" };
+          this.decisionView = false;
+          if (!entry.unverified && entry.grade === "Blunder") this.captureBlunder(before, rec.san, entry.bestUci);
         }
         this.announce(this.coachMessage);
       } catch (e) {
@@ -924,12 +1034,45 @@ export class App {
     }
   }
   private wirePlay() {
+    const reviewing = this.decisionView && this.decisionReview;
     this.boardRender(
-      this.game,
-      !this.thinking && !this.gameResult && this.game.turn === this.player,
-      { onMove: (uci: string) => this.makePlayMove(uci) },
+      reviewing ? new Chess(this.decisionReview!.fen) : this.game,
+      !reviewing && !this.thinking && !this.gameResult && this.game.turn === this.player,
+      {
+        onMove: (uci: string) => this.makePlayMove(uci),
+        arrow: reviewing ? { uci: this.decisionReview!.uci, color: "green" as const } : null,
+      },
     );
     this.bind("beginner-e4", () => this.makePlayMove("e4"));
+    this.bind("decision-show", () => {
+      this.decisionView = true;
+      this.announce(`Showing the position before ${this.decisionReview?.played}; the arrow marks the preferred ${this.decisionReview?.best}`);
+      this.render();
+    });
+    this.bind("decision-back", () => {
+      this.decisionView = false;
+      this.announce("Back to the current position");
+      this.render();
+    });
+    this.bind("analyze-game", () => this.analyzeFinishedGame());
+    this.bind("analyze-cancel", () => {
+      this.revision++;
+      this.engine.cancel();
+      this.analyzing = false;
+      this.analysisProgress = "";
+      this.coachMessage = "Analysis stopped; completed comparisons are kept below.";
+      this.render();
+    });
+    document.querySelectorAll<HTMLElement>("[data-decision]").forEach((node) =>
+      node.addEventListener("click", () => {
+        const entry = this.reviews[Number(node.dataset.decision)];
+        if (!entry?.bestUci) return;
+        this.decisionReview = { fen: entry.fenBefore, uci: entry.bestUci, played: entry.played, best: entry.best || "" };
+        this.decisionView = true;
+        this.announce(`Showing the position before ${entry.played}`);
+        this.render();
+      }),
+    );
     this.onChange("guide-language", (value) => {
       if (!lessonLanguages.includes(value as LessonLanguage)) return;
       this.state.settings.language = value as LessonLanguage;
@@ -976,6 +1119,8 @@ export class App {
       }
       this.gameResult = null;
       this.lastArrow = null;
+      this.decisionReview = null;
+      this.decisionView = false;
       this.status = "Move taken back";
       this.render();
       this.savePracticeRecovery();
@@ -1024,6 +1169,9 @@ export class App {
         this.gameSaved = false;
         this.reviews = [];
         this.lastArrow = null;
+        this.decisionReview = null;
+        this.decisionView = false;
+        this.analyzing = false;
         this.selectedTime = "zen";
         this.status = "Custom position imported";
         this.coachMessage = "";
@@ -1072,6 +1220,9 @@ export class App {
         this.selectedTime = "zen";
         this.reviews = [];
         this.lastArrow = null;
+        this.decisionReview = null;
+        this.decisionView = false;
+        this.analyzing = false;
         this.coachMessage = "Practice from the critical position. The original game remains in your saved history.";
         this.coachLesson = "";
         this.status = "Find a stronger continuation";
@@ -1104,7 +1255,7 @@ export class App {
     const card =
       this.openingMode === "walk"
         ? `<div class="opening-note"><b>Strategic idea</b><p>${esc(line.idea)}</p><b>Common mistake</b><p>${esc(line.trap)}</p></div><div class="button-row">${btn("opening-prev", "← Previous")}${btn("opening-next", "Next →", "primary")}</div><p class="helper">${this.openingIndex}/${line.moves.length} plies · ${next ? `Next: ${esc(next)}` : "Line complete"}</p>${lesson}`
-        : `<div class="coach-box">${esc(this.openingFeedback || (this.openingIndex >= line.moves.length ? "Drill complete. Review the reasons below, then return later to recall them." : isPlayersTurn ? "Find the repertoire move. A correct answer will show both the move and its purpose." : "Opponent reply incoming…"))}</div><div class="button-row">${btn("opening-restart", "Restart drill")}${btn("opening-hint", "Reveal & explain")}</div><form id="opening-move-form" class="inline-form"><input id="opening-move" aria-label="Enter opening move" placeholder="SAN or UCI" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="send"><button class="btn primary" type="submit">Play</button></form><p class="helper">Correct moves ${this.openingCorrect} · retries ${this.openingErrors}. Legal alternatives are not automatically bad; they are simply outside this memory line.</p>${lesson}`;
+        : `<div class="coach-box">${esc(this.openingFeedback || (this.openingIndex >= line.moves.length ? "Drill complete. Review the reasons below, then return later to recall them." : isPlayersTurn ? "Find the repertoire move. A correct answer will show both the move and its purpose." : "Opponent reply incoming…"))}</div><div class="button-row">${btn("opening-restart", "Restart drill")}${btn("opening-hint", "Reveal & explain")}</div><form id="opening-move-form" class="inline-form"><input id="opening-move" aria-label="Enter opening move" placeholder="SAN or UCI" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="send"><button class="btn primary" type="submit">Play</button></form><p class="helper">Correct moves ${this.openingCorrect} · retries ${this.openingErrors} · hints ${this.openingHints}. Only independent recall—no errors, no hints—advances mastery. Legal alternatives are not automatically bad; they are simply outside this memory line.</p>${lesson}`;
     const side = this.panel(
       line.title,
       `${selector}${modes}${card}<div class="section-rule"></div><h3>Memory schedule</h3><div class="progress-track"><div style="width:${stat.masteryPercent}%"></div></div><p class="helper">Mastery ${stat.masteryPercent}% · ${stat.attempts} completed review${stat.attempts === 1 ? "" : "s"} · ${due(stat) ? "Due now" : "Next review " + new Date(stat.nextDueTimestamp).toLocaleDateString()}</p>${btn("reset-opening", "Reset this line")}`,
@@ -1138,6 +1289,7 @@ export class App {
       this.openingIndex = 0;
       this.openingCorrect = 0;
       this.openingErrors = 0;
+      this.openingHints = 0;
       this.openingRecorded = false;
       this.openingFeedback = "";
       this.openingLastSan = "";
@@ -1156,6 +1308,7 @@ export class App {
       this.openingIndex = 0;
       this.openingCorrect = 0;
       this.openingErrors = 0;
+      this.openingHints = 0;
       this.openingRecorded = false;
       this.openingFeedback = "";
       this.openingLastSan = "";
@@ -1178,6 +1331,7 @@ export class App {
       this.openingIndex = 0;
       this.openingCorrect = 0;
       this.openingErrors = 0;
+      this.openingHints = 0;
       this.openingRecorded = false;
       this.openingFeedback = "";
       this.openingLastSan = "";
@@ -1186,6 +1340,8 @@ export class App {
     });
     this.bind("opening-hint", () => {
       if (this.openingIndex < line.moves.length) {
+        // A revealed answer makes this run assisted, not independent recall.
+        if (this.openingMode === "drill") this.openingHints++;
         const move = line.moves[this.openingIndex];
         this.openingFeedback = this.state.settings.guidance
           ? `Try ${move}. ${line.explanations[this.openingIndex]}`
@@ -1238,18 +1394,25 @@ export class App {
   private completeOpening() {
     if (this.openingRecorded) return;
     this.openingRecorded = true;
-    const line = this.currentOpening(),
-      correct = this.openingErrors === 0;
-    this.state.srs[line.id] = review(
-      this.state.srs[line.id] || freshSrs(),
-      correct,
-    );
-    this.recordLearning("openings", correct, line.id);
+    const line = this.currentOpening();
+    // Three honest outcomes: independent recall advances mastery, assisted
+    // recall schedules an independent retry, and errors lapse the line.
+    const independent = this.openingErrors === 0 && this.openingHints === 0;
+    const assisted = this.openingErrors === 0 && this.openingHints > 0;
+    const stat = this.state.srs[line.id] || freshSrs();
+    this.state.srs[line.id] = independent
+      ? review(stat, true)
+      : assisted
+        ? reviewAssisted(stat)
+        : review(stat, false);
+    this.recordLearning("openings", independent, assisted ? line.id + "#assisted" : line.id);
     this.saveSoon();
     this.announce(
-      correct
-        ? "Line recalled without errors. Review scheduled."
-        : "Line completed; review scheduled sooner.",
+      independent
+        ? "Line recalled independently. Mastery advanced; next review scheduled."
+        : assisted
+          ? "Line completed with hints. Assisted recall does not advance mastery; an independent retry is due tomorrow."
+          : "Line completed with errors; review scheduled sooner.",
     );
   }
   private openingTryMove(uci: string) {
@@ -1591,7 +1754,7 @@ export class App {
     );
     const side = this.panel(
       e.title,
-      `<div class="field-row"><label for="endgame-select">Training position</label><select id="endgame-select">${endgames.map((p) => `<option value="${p.id}" ${p.id === e.id ? "selected" : ""}>${esc(p.title)}</option>`).join("")}</select></div><h3>Objective</h3><p>${esc(e.goal)}</p><h3>Key idea</h3><p>${esc(e.lesson)}</p><div class="button-row">${btn("start-endgame", "Start drill", "primary")}${inGame ? btn("reset-endgame", "Reset") : ""}</div>${inGame ? `<div class="section-rule"></div><form id="endgame-move-form" class="inline-form"><input id="endgame-move" aria-label="Enter endgame move" placeholder="e.g. Rd1+"><button class="btn primary" type="submit">Play</button></form><p class="helper">${this.gameResult ? "Result " + this.gameResult : "Your objective is judged by the actual legal game result or promotion—not by shallow centipawns."}</p>${this.latestMoveLesson()}` : ""}`,
+      `<div class="field-row"><label for="endgame-select">Training position</label><select id="endgame-select">${endgames.map((p) => `<option value="${p.id}" ${p.id === e.id ? "selected" : ""}>${esc(p.title)}</option>`).join("")}</select></div><h3>Objective</h3><p>${esc(e.goal)}</p><h3>Key idea</h3><p>${esc(e.lesson)}</p><div class="button-row">${btn("start-endgame", "Start drill", "primary")}${inGame ? btn("reset-endgame", "Reset") : ""}</div>${inGame ? `<div class="section-rule"></div><form id="endgame-move-form" class="inline-form"><input id="endgame-move" aria-label="Enter endgame move" placeholder="e.g. Rd1+"><button class="btn primary" type="submit">Play</button></form><p class="helper">${this.gameResult ? "Result " + this.gameResult : "Completion is judged against the stated objective above—" + { promote: "a promotion (or checkmate)", mate: "checkmate", draw: "holding the draw", win: "winning the position" }[e.success] + "—not by shallow centipawns."}</p>${this.latestMoveLesson()}` : ""}`,
       "ENDGAME FUNDAMENTALS",
     );
     return this.layout(
@@ -1666,7 +1829,7 @@ export class App {
     const list = this.state.blunders
       .map(
         (p) =>
-          `<button class="bank-item ${p.id === b.id ? "chosen" : ""}" data-blunder="${p.id}"><span>${esc(p.title)}${p.starter ? " · starter" : ""}</span><small>${p.solved} solved</small></button>`,
+          `<button class="bank-item ${p.id === b.id ? "chosen" : ""}" data-blunder="${p.id}"><span>${esc(p.title)}${p.starter ? " · starter" : ""}${p.nextDueTimestamp !== undefined && p.nextDueTimestamp <= Date.now() ? '<span class="due-badge">Due</span>' : ""}</span><small>${p.solved} solved</small></button>`,
       )
       .join("");
     const side = this.panel(
@@ -1693,35 +1856,86 @@ export class App {
     const game = new Chess(b.fen);
     this.player = game.turn;
     this.lastArrow = null;
-    const solve = (attempt: string) => {
-      const test = new Chess(b.fen);
-      let correct = false;
+    const solve = async (attempt: string) => {
+      if (this.blunderBusy) return;
+      this.blunderBusy = true;
       this.blunderShowLesson = false;
       try {
-        const got = test.move(attempt);
-        if (got.san.replace(/[+#]$/, "") === b.best.replace(/[+#]$/, "")) {
-          correct = true;
-          this.blunderShowLesson = true;
+        const test = new Chess(b.fen);
+        let got;
+        try {
+          got = test.move(attempt);
+        } catch {
+          this.blunderFeedback = "That move is illegal in this position. Try a move shown by selecting one of your pieces.";
+          this.announce(this.blunderFeedback);
+          this.render();
+          return;
+        }
+        const mover = b.fen.split(" ")[1] as Color;
+        // Accept the stored continuation, any verified mate, or an engine-verified
+        // equivalent; never punish a defensible alternative we failed to check.
+        let mode: "exact" | "mate" | "equivalent" | "unverified" | "wrong" = "wrong";
+        if (got.san.replace(/[+#]$/, "") === b.best.replace(/[+#]$/, "")) mode = "exact";
+        else {
+          const outcome = test.result();
+          if (outcome && outcome !== "1/2-1/2") mode = "mate";
+          else {
+            try {
+              const bestGame = new Chess(b.fen);
+              bestGame.move(b.best);
+              const rev = this.revision;
+              const afterBest = await this.engine.evaluatePosition(bestGame.fen(), 2);
+              if (rev !== this.revision) return;
+              const afterGot = await this.engine.evaluatePosition(test.fen(), 2);
+              if (rev !== this.revision) return;
+              const winBest = cpToWinProbability(scoreForSide(afterBest.score, mover));
+              const winGot = cpToWinProbability(scoreForSide(afterGot.score, mover));
+              mode = winGot >= winBest - 3 ? "equivalent" : "wrong";
+            } catch {
+              mode = "unverified";
+            }
+          }
+        }
+        if (mode === "wrong" || mode === "unverified") {
+          this.blunderFeedback = mode === "unverified"
+            ? `${got.san} is legal, but only the stored continuation ${b.best} can be checked without the engine. Treat this as recalling one specified move.`
+            : `${got.san} is legal, but it misses this puzzle’s tactical point. Reconsider checks, captures, and immediate threats.`;
+          this.recordLearning("tactics", false, b.id);
+          this.announce(this.blunderFeedback);
+          this.render();
+          return;
+        }
+        const independent = !this.blunderHinted;
+        const nextStep = (current: number) => current >= 14 ? 30 : current >= 7 ? 14 : current >= 3 ? 7 : current >= 1 ? 3 : 1;
+        if (independent) {
           b.solved++;
-          this.blunderFeedback = "Correct: " + b.best + "." + (this.state.settings.guidance
-            ? " The lesson below explains the concrete resource."
-            : "");
-        } else
-          this.blunderFeedback =
-            `${got.san} is legal, but it misses this puzzle’s tactical point. Reconsider checks, captures, and immediate threats.`;
-      } catch {
-        this.blunderFeedback = "That move is illegal in this position. Try a move shown by selecting one of your pieces.";
+          b.intervalDays = nextStep(b.intervalDays || 0);
+        } else b.intervalDays = Math.max(1, b.intervalDays || 0);
+        b.nextDueTimestamp = Date.now() + b.intervalDays * 86_400_000;
+        this.blunderShowLesson = true;
+        const verifiedNote = mode === "mate"
+          ? `Verified by the rules: ${got.san} also delivers checkmate.`
+          : mode === "equivalent"
+            ? `Verified equivalent: ${got.san} holds the same evaluation as ${b.best} under identical search limits.`
+            : `Correct: ${b.best}.`;
+        this.blunderFeedback = verifiedNote + (independent
+          ? this.state.settings.guidance ? " The lesson below explains the concrete resource." : ""
+          : " Solved with a hint—an independent retry is scheduled soon; only independent solves advance the interval.");
+        this.recordLearning("tactics", independent, b.id + (independent ? "" : "#assisted"));
+        this.saveSoon();
+        this.announce(this.blunderFeedback);
+        this.render();
+      } finally {
+        this.blunderBusy = false;
       }
-      this.recordLearning("tactics", correct, b.id);
-      this.announce(this.blunderFeedback);
-      this.render();
     };
-    this.boardRender(game, true, { blind: "standard", onMove: solve });
+    this.boardRender(game, true, { blind: "standard", onMove: (uci: string) => void solve(uci) });
     $("blunder-move-form")?.addEventListener("submit", (event) => {
       event.preventDefault();
-      solve(($("blunder-move") as HTMLInputElement).value);
+      void solve(($("blunder-move") as HTMLInputElement).value);
     });
     this.bind("blunder-hint", () => {
+      this.blunderHinted = true;
       this.blunderShowLesson = true;
       this.blunderFeedback = `The move is ${b.best}.${this.state.settings.guidance ? " Read the idea below, then try it from this position later." : ""}`;
       this.render();
@@ -1732,6 +1946,7 @@ export class App {
       this.blunderId = this.state.blunders[0]?.id || "";
       this.blunderFeedback = "";
       this.blunderShowLesson = false;
+      this.blunderHinted = false;
       this.saveSoon();
       this.render();
     });
@@ -1740,6 +1955,7 @@ export class App {
         this.blunderId = (n as HTMLElement).dataset.blunder!;
         this.blunderFeedback = "";
         this.blunderShowLesson = false;
+        this.blunderHinted = false;
         this.render();
       }),
     );

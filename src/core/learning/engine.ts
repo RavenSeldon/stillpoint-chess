@@ -78,6 +78,19 @@ function gameValue(result: string, side: "w" | "b") {
   return 0.5;
 }
 
+/**
+ * Expected score against each opponent tier. Outcomes are read relative to
+ * difficulty, so a win over a strong engine counts more than a win over a
+ * novice one; tiers are device-dependent heuristics, not calibrated ratings.
+ */
+const tierExpectation: Record<number, number> = { 1: 0.85, 2: 0.75, 3: 0.6, 4: 0.45, 5: 0.3, 6: 0.15 };
+
+function contextualGameValue(game: LearningState["games"][number]) {
+  const raw = gameValue(game.result, game.playerSide);
+  if (!game.strength) return raw;
+  return clamp(0.5 + (raw - (tierExpectation[game.strength] ?? 0.5)));
+}
+
 function collectEvidence(state: LearningState): Record<LearningArea, Evidence[]> {
   const result = {} as Record<LearningArea, Evidence[]>;
   for (const area of skillOrder) result[area] = [];
@@ -86,11 +99,11 @@ function collectEvidence(state: LearningState): Record<LearningArea, Evidence[]>
   }
   for (const game of state.games) {
     if (game.mode && game.mode !== "play") continue;
-    result.play.push({ value: gameValue(game.result, game.playerSide), weight: 1, timestamp: game.date });
+    result.play.push({ value: contextualGameValue(game), weight: 1, timestamp: game.date });
   }
 
   for (const [key, srs] of Object.entries(state.srs)) {
-    const recorded = historyStats(state.learning, (attempt) => attempt.area === "openings" && attempt.key === key);
+    const recorded = historyStats(state.learning, (attempt) => attempt.area === "openings" && (attempt.key === key || attempt.key === key + "#assisted"));
     const attempts = Math.max(0, srs.attempts - recorded.attempts);
     const correct = Math.max(0, srs.correctCount - recorded.correct);
     const masteryAdjustment = (srs.masteryPercent / 100 - (attempts ? correct / attempts : 0)) * 0.25;
@@ -117,7 +130,7 @@ function collectEvidence(state: LearningState): Record<LearningArea, Evidence[]>
 function recentChange(state: LearningState, area: LearningArea, now: number) {
   const events = [
     ...state.learning.filter((attempt) => attempt.area === area).map((attempt) => ({ timestamp: attempt.timestamp, value: attempt.correct ? 1 : 0 })),
-    ...(area === "play" ? state.games.filter((game) => !game.mode || game.mode === "play").map((game) => ({ timestamp: game.date, value: gameValue(game.result, game.playerSide) })) : []),
+    ...(area === "play" ? state.games.filter((game) => !game.mode || game.mode === "play").map((game) => ({ timestamp: game.date, value: contextualGameValue(game) })) : []),
   ].filter((event) => event.timestamp <= now).sort((a, b) => b.timestamp - a.timestamp);
   if (events.length < 4) return null;
   const recent = events.slice(0, Math.min(5, Math.ceil(events.length / 2)));
@@ -185,8 +198,14 @@ export function buildLearningProfile(state: LearningState, now = Date.now()): Le
 
   const dueOpening = Object.entries(state.srs).filter(([, srs]) => due(srs, now)).sort((a, b) => a[1].nextDueTimestamp - b[1].nextDueTimestamp)[0];
   if (dueOpening) add("openings", dueOpening[0], "Due now for spaced review; revisit before adding new lines.");
-  const personalBlunder = state.blunders.filter((blunder) => !blunder.starter).sort((a, b) => a.solved - b.solved || (b.timestamp || 0) - (a.timestamp || 0))[0];
-  if (personalBlunder) add("tactics", personalBlunder.id, "A position from your own games is ready for pattern repair.");
+  const personalBlunders = state.blunders.filter((blunder) => !blunder.starter);
+  const dueBlunder = personalBlunders
+    .filter((blunder) => blunder.nextDueTimestamp !== undefined && blunder.nextDueTimestamp <= now)
+    .sort((a, b) => a.nextDueTimestamp! - b.nextDueTimestamp!)[0];
+  const personalBlunder = dueBlunder || personalBlunders.sort((a, b) => a.solved - b.solved || (b.timestamp || 0) - (a.timestamp || 0))[0];
+  if (personalBlunder) add("tactics", personalBlunder.id, dueBlunder
+    ? "A repaired pattern is due for spaced review—solve it again without help."
+    : "A position from your own games is ready for pattern repair.");
   if (growthEdge) add(growthEdge.id);
   if (strongest && strongest.id !== growthEdge?.id) add(strongest.id);
   for (const skill of [...skills].sort((a, b) => a.confidence - b.confidence || a.score - b.score)) add(skill.id);

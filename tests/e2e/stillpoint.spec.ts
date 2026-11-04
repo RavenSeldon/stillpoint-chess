@@ -327,7 +327,8 @@ test("Chinese lessons, larger text, reduced motion, and skip link persist access
 
   await page.locator("#guide-language").selectOption("zh");
   await expect(page.getByRole("heading", { name: "走出第一步，就已经开始了" })).toBeVisible();
-  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await expect(page.locator(".beginner-guide")).toHaveAttribute("lang", "zh-CN");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await page.getByRole("button", { name: "Data & Privacy" }).click();
   await expect(page.locator("#language-select")).toHaveValue("zh");
   await page.locator("#setting-large-text").check();
@@ -374,7 +375,8 @@ test("French and Dutch teaching persist and fit a mobile viewport", async ({ pag
 
   await page.locator("#guide-language").selectOption("fr");
   await expect(page.getByRole("heading", { name: "Votre premier coup suffit" })).toBeVisible();
-  await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+  await expect(page.locator(".beginner-guide")).toHaveAttribute("lang", "fr");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
 
   await page.getByRole("button", { name: "Blunder Bank" }).click();
@@ -383,7 +385,7 @@ test("French and Dutch teaching persist and fit a mobile viewport", async ({ pag
 
   await page.getByRole("button", { name: "Data & Privacy" }).click();
   await page.locator("#language-select").selectOption("nl");
-  await expect(page.locator("html")).toHaveAttribute("lang", "nl");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await page.getByRole("button", { name: "Blunder Bank" }).click();
   await expect(page.locator(".move-purpose")).toContainText("De dame gaat via de diagonaal naar h4");
 
@@ -408,7 +410,8 @@ test("French and Dutch teaching persist and fit a mobile viewport", async ({ pag
   await expect(page.locator("#language-select")).toHaveValue("nl");
   await page.getByRole("button", { name: "Play", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Je eerste zet is genoeg" })).toBeVisible();
-  await expect(page.locator("html")).toHaveAttribute("lang", "nl");
+  await expect(page.locator(".beginner-guide")).toHaveAttribute("lang", "nl");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
 });
 

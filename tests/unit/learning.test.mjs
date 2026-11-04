@@ -55,6 +55,31 @@ test("recent trend compares successive local outcomes", () => {
   assert.equal(study.recentChange, 100);
 });
 
+test("game outcomes are read against opponent tier, not flat averages", () => {
+  const game = (strength, result) => ({ id: crypto.randomUUID(), date: now, pgn: "1. e4 e5", result, playerSide: "w", mode: "play", strength });
+  const beatStrong = freshState();
+  beatStrong.games = [game(6, "1-0"), game(6, "1-0"), game(6, "1-0"), game(6, "1-0")];
+  const beatNovice = freshState();
+  beatNovice.games = [game(1, "1-0"), game(1, "1-0"), game(1, "1-0"), game(1, "1-0")];
+  const strongScore = buildLearningProfile(beatStrong, now).skills.find((skill) => skill.id === "play").score;
+  const noviceScore = buildLearningProfile(beatNovice, now).skills.find((skill) => skill.id === "play").score;
+  assert.ok(strongScore > noviceScore, `expected ${strongScore} > ${noviceScore}`);
+  const legacy = freshState();
+  legacy.games = [{ id: crypto.randomUUID(), date: now, pgn: "1. e4 e5", result: "1-0", playerSide: "w" }];
+  assert.doesNotThrow(() => buildLearningProfile(legacy, now));
+});
+
+test("due personal blunders are recommended before unscheduled ones", () => {
+  const state = freshState();
+  const base = { fen: "6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1", bad: "Re2", best: "Re8#", starter: false };
+  state.blunders = [
+    { ...base, id: "later", solved: 0, title: "later", nextDueTimestamp: now + 86_400_000, intervalDays: 1 },
+    { ...base, id: "due", solved: 5, title: "due", nextDueTimestamp: now - 1, intervalDays: 3 },
+  ];
+  const tactics = buildLearningProfile(state, now).recommendations.find((item) => item.area === "tactics");
+  assert.equal(tactics.key, "due");
+});
+
 test("new opening events do not duplicate aggregate SRS evidence", () => {
   const withSrs = freshState();
   withSrs.learning = [attempt("openings", true, "italian"), attempt("openings", true, "italian")];
