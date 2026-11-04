@@ -23,6 +23,20 @@ test("Chinese move reading and reasons preserve the same legal facts", () => {
   assert.ok(lesson.reasons.some((reason) => reason.includes("中心影响")));
 });
 
+test("French and Dutch move readings preserve concrete legal and central facts", () => {
+  const french = explainMove(INITIAL_FEN, "e2e4", "fr");
+  assert.equal(french.san, "e4");
+  assert.match(french.reading, /pion de e2 à e4/);
+  assert.match(french.reading, /ne comporte pas de lettre de pièce/);
+  assert.ok(french.reasons.some((reason) => reason.includes("Influence centrale")));
+
+  const dutch = explainMove(INITIAL_FEN, "e2e4", "nl");
+  assert.equal(dutch.san, "e4");
+  assert.match(dutch.reading, /pion van e2 naar e4/);
+  assert.match(dutch.reading, /geen stukletter/);
+  assert.ok(dutch.reasons.some((reason) => reason.includes("Centrale invloed")));
+});
+
 test("development explains Nf3 without inventing a guaranteed strategy", () => {
   const lesson = explainMove(INITIAL_FEN, "Nf3");
   assert.match(lesson.reading, /knight from g1 to f3/);

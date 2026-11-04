@@ -11,18 +11,18 @@
 
 | Check | Outcome |
 |---|---|
-| `npm run build` | PASS — strict TypeScript, Vite production bundle, generated service worker, 42 local assets precached |
-| `npm run test:unit` | PASS — 45 passed, 0 failed; includes initial perft 20/400/8902, chess rules, English/Chinese move explanations, authored-content coverage, PGN round trips, evaluation/mate parsing, SRS, knight BFS, backup/preference validation, adaptive learning, and recovery validation/expiry |
-| `npm run test:static` | PASS — all 42 assets, Stockfish WASM, manifest, and icons served beneath `/sample-repository/` |
-| `npm run test:e2e` | PASS — 16 Chromium tests passed, 0 failed/skipped |
+| `npm run build` | PASS — strict TypeScript, Vite production bundle, generated service worker, 43 local assets precached |
+| `npm run test:unit` | PASS — 46 passed, 0 failed; includes initial perft 20/400/8902, chess rules, English/Chinese/French/Dutch move explanations, authored-content coverage, PGN round trips, evaluation/mate parsing, SRS, knight BFS, backup/preference validation, adaptive learning, and recovery validation/expiry |
+| `npm run test:static` | PASS — all 43 assets, Stockfish WASM, manifest, and icons served beneath `/sample-repository/` |
+| `npm run test:e2e` | PASS — 17 Chromium tests passed, 0 failed/skipped |
 | Real engine game and coach review | PASS — legal user move, real Stockfish reply, two move records, and review UI observed in Chromium |
 | Beginner teaching | PASS — first-game e4 action produced a real engine reply; separate learner/opponent lessons and the preferred-move explanation remained visible |
 | Optional guidance | PASS — dismissal removed extended lessons without disabling play; the preference survived reload and could be re-enabled |
 | Authored exercise lessons | PASS — correct and revealed opening moves showed their authored purposes; Fool’s Mate revealed its concrete checkmate lesson without blaming the learner |
-| Language and reading access | PASS — keyboard skip link focused main content; Simplified Chinese guide/move lessons, larger text, and reduced motion persisted after IndexedDB writes and reload; decorative navigation icons were excluded from accessible names |
+| Language and reading access | PASS — keyboard skip link focused main content; Simplified Chinese guide/move lessons, larger text, and reduced motion persisted after IndexedDB writes and reload; French and Dutch guides, starter lessons, and saved preferences were exercised; decorative navigation icons were excluded from accessible names |
 | Direct UCI worker check | PASS — `uci`/`uciok` and a legal `bestmove` from the bundled worker |
 | Mobile training flow | PASS at 390 × 844 — Opening Dojo, Visualization, feedback, and no main-content horizontal overflow |
-| Mobile beginner layout | PASS at 390 × 844 — onboarding, English/Chinese lessons, and large text produced no document or main-content horizontal overflow |
+| Mobile beginner layout | PASS at 390 × 844 — onboarding and English/Chinese/French/Dutch lessons produced no document or main-content horizontal overflow |
 | Learning Path flow | PASS — two distinct Visualization attempts appeared in the activity trail; answered prompts locked against duplicate taps; the recommendation opened the intended exercise |
 | Four-theme flow | PASS — Indigo Focus, Lavender Paper, Forest Quiet, and Ember Study reached distinct final backgrounds after their transitions; Ember Study persisted after reload |
 | Motion and mobile navigation | PASS — view entrance ran normally; active mobile tab centered; system and in-app reduced-motion settings removed animation |
@@ -31,7 +31,7 @@
 | Piece artwork and visibility modes | PASS — 32 local SVGs loaded; Ghost remained at 25% opacity; Discs and Full blindfold changed rendering as intended; accessible square labels and Standard mode remained intact |
 | Offline production reentry | PASS — service worker cached WASM and artwork; after offline reload, 32 visible/loaded SVG pieces, training, and Stockfish reply still worked |
 | PGN regression | PASS — exported result is not duplicated and the exported game round-trips to the same final FEN |
-| Visual inspection | PASS at 1440 × 1000 desktop and 390 × 844 mobile viewports; first-game Play and settled Simplified Chinese large-text onboarding inspected without overflow |
+| Visual inspection | PASS at 1440 × 1000 desktop and 390 × 844 mobile viewports; first-game Play and settled Simplified Chinese, French, and Dutch onboarding inspected without overflow; mobile language selectors stack to preserve full option labels |
 
 The complete `npm run verify` sequence was executed successfully. Browser tests ran against the production build through Vite preview. The production bundle is approximately 2.6 MB, dominated by the locally cached Stockfish WASM asset.
 
@@ -51,11 +51,12 @@ The complete `npm run verify` sequence was executed successfully. Browser tests 
 - Added validated ten-minute practice recovery across navigation, reloads, and page exits; invalid or expired snapshots are removed, and clearing local progress also clears recovery.
 - Added dismissible beginner onboarding, legal move decoding, concrete teaching for every authored opening ply and calculation answer, and nonjudgmental starter Blunder Bank lessons.
 - Kept the learner’s latest explanation visible after the engine replies, rather than replacing it with the opponent’s move.
-- Added persistent English/Simplified Chinese teaching preferences, larger text, explicit reduced motion, a keyboard skip link, and cleaner accessible navigation names.
+- Added persistent English/Simplified Chinese/French/Dutch teaching preferences, larger text, explicit reduced motion, a keyboard skip link, and cleaner accessible navigation names.
+- Stacked mobile language selectors after visual inspection showed that longer option labels needed more room.
 
 ## Not verified or intentionally not claimed
 
-- Chinese localization is intentionally partial: authored opening/master notes and the wider interface remain English.
+- Simplified Chinese, French, and Dutch localization is intentionally partial: authored opening/master notes and the wider interface remain English.
 - Generated move lessons explain observable chess facts; they do not claim to reconstruct a complete strategic plan or human intention from Stockfish output.
 - No physical phone, iOS/Safari, WebKit, low-memory device, or installed-app standalone session was tested.
 - Chromium’s native installation prompt was not accepted end-to-end; the app listens for the real prompt and provides a working action only when the browser supplies it.

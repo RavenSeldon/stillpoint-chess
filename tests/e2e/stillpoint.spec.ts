@@ -359,3 +359,50 @@ test("Chinese lessons, larger text, reduced motion, and skip link persist access
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
   expect(overflow).toBe(false);
 });
+
+test("French and Dutch teaching persist and fit a mobile viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(page.locator("#guide-language")).toHaveValue("en");
+  await expect(page.locator("#guide-language option")).toHaveCount(4);
+  expect(await page.locator("#guide-language").evaluate((select: HTMLSelectElement) => Array.from(select.options, (option) => option.value))).toEqual(["en", "zh", "fr", "nl"]);
+
+  await page.locator("#guide-language").selectOption("fr");
+  await expect(page.getByRole("heading", { name: "Votre premier coup suffit" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+
+  await page.getByRole("button", { name: "Blunder Bank" }).click();
+  await page.getByRole("button", { name: "Reveal & explain" }).click();
+  await expect(page.locator(".move-purpose")).toContainText("La dame rejoint h4 par la diagonale");
+
+  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  await page.locator("#language-select").selectOption("nl");
+  await expect(page.locator("html")).toHaveAttribute("lang", "nl");
+  await page.getByRole("button", { name: "Blunder Bank" }).click();
+  await expect(page.locator(".move-purpose")).toContainText("De dame gaat via de diagonaal naar h4");
+
+  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  await expect(page.locator("#language-select")).toHaveValue("nl");
+  await expect.poll(() => page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("zen-chess-lab", 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const state = await new Promise<{ settings?: { language: string } }>((resolve, reject) => {
+      const request = db.transaction("state", "readonly").objectStore("state").get("current");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    return state.settings?.language === "nl";
+  })).toBe(true);
+  await page.reload();
+  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  await expect(page.locator("#language-select")).toHaveValue("nl");
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Je eerste zet is genoeg" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "nl");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+});

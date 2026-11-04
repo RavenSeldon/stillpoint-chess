@@ -1273,6 +1273,8 @@ body, .navigation, .panel, .board-mount {
 @media (max-width: 700px) {
   .beginner-guide { padding: 19px; }
   .beginner-guide .button-row .btn { flex: 1 1 auto; }
+  .guide-language { max-width: none; align-items: stretch; flex-direction: column; }
+  .guide-language select { width: 100%; max-width: none; }
   .move-lesson { padding: 14px; }
 }
 

@@ -1,5 +1,6 @@
 import { Chess } from "../chess/Chess.js";
 import type { SRS } from "../srs/scheduler.js";
+import { lessonLanguages, type LessonLanguage } from "../learning/languages.js";
 
 export const themeIds = ["indigo", "paper", "forest", "ember"] as const;
 export type Theme = typeof themeIds[number];
@@ -51,7 +52,7 @@ export type SaveState = {
     coords: boolean;
     sound: boolean;
     guidance: boolean;
-    language: "en" | "zh";
+    language: LessonLanguage;
     largeText: boolean;
     reduceMotion: boolean;
   };
@@ -137,7 +138,7 @@ export function validateSave(data: unknown): SaveState {
     typeof settings.coords !== "boolean" ||
     typeof settings.sound !== "boolean" ||
     (settings.guidance !== undefined && typeof settings.guidance !== "boolean") ||
-    (settings.language !== undefined && !["en", "zh"].includes(String(settings.language))) ||
+    (settings.language !== undefined && !(lessonLanguages as readonly string[]).includes(String(settings.language))) ||
     (settings.largeText !== undefined && typeof settings.largeText !== "boolean") ||
     (settings.reduceMotion !== undefined && typeof settings.reduceMotion !== "boolean")
   ) throw Error("Invalid settings");
@@ -146,7 +147,7 @@ export function validateSave(data: unknown): SaveState {
     coords: settings.coords,
     sound: settings.sound,
     guidance: settings.guidance !== false,
-    language: settings.language === "zh" ? "zh" : "en",
+    language: (lessonLanguages as readonly string[]).includes(String(settings.language)) ? settings.language as LessonLanguage : "en",
     largeText: settings.largeText === true,
     reduceMotion: settings.reduceMotion === true,
   };

@@ -28,6 +28,7 @@ import { PRACTICE_RECOVERY_KEY, parsePracticeRecovery } from "../core/storage/re
 import { freshSrs, due, review } from "../core/srs/scheduler.js";
 import { buildLearningProfile, type Recommendation } from "../core/learning/engine.js";
 import { explainMove } from "../core/learning/explanations.js";
+import { guideCopy, languageNames, languageTags, lessonCopy, lessonLanguages, starterLessons, type LessonLanguage } from "../core/learning/languages.js";
 import {
   openings,
   masters,
@@ -414,32 +415,34 @@ export class App {
   private moveLesson(before: string, move: string, purpose = "") {
     if (!this.state.settings.guidance) return "";
     try {
-      const zh = this.state.settings.language === "zh";
+      const copy = lessonCopy[this.state.settings.language];
       const lesson = explainMove(before, move, this.state.settings.language);
-      return `<section class="move-lesson" aria-label="${zh ? "着法讲解" : "Move explanation"}"><span class="overline">${zh ? "读懂这一步" : "READ THIS MOVE"}</span><p class="move-reading">${esc(lesson.reading)}</p>${purpose ? `<p class="move-purpose"><b>${zh ? "为什么这步出现在这里：" : "Why this move appears here:"}</b> ${esc(purpose)}</p>` : ""}<ul>${lesson.reasons.map((reason) => `<li>${esc(reason)}</li>`).join("")}</ul></section>`;
+      return `<section class="move-lesson" aria-label="${esc(copy.explanation)}"><span class="overline">${esc(copy.readMove)}</span><p class="move-reading">${esc(lesson.reading)}</p>${purpose ? `<p class="move-purpose"><b>${esc(copy.why)}</b> ${esc(purpose)}</p>` : ""}<ul>${lesson.reasons.map((reason) => `<li>${esc(reason)}</li>`).join("")}</ul></section>`;
     } catch {
       return "";
     }
   }
   private latestMoveLesson() {
     if (!this.state.settings.guidance) return "";
-    const zh = this.state.settings.language === "zh";
+    const copy = lessonCopy[this.state.settings.language];
     const last = this.game.history.at(-1);
     const lastPlayer = [...this.game.history].reverse().find((move) => move.before.split(" ")[1] === this.player);
     const playerLesson = lastPlayer
-      ? `<h3>${zh ? "你的上一手" : "Your last move"}</h3>${this.moveLesson(lastPlayer.before, lastPlayer.uci)}`
+      ? `<h3>${esc(copy.yourLast)}</h3>${this.moveLesson(lastPlayer.before, lastPlayer.uci)}`
       : "";
     const opponentLesson = last && last !== lastPlayer
-      ? `<h3>${zh ? "对手的上一手" : "Opponent’s last move"}</h3>${this.moveLesson(last.before, last.uci)}`
+      ? `<h3>${esc(copy.opponentLast)}</h3>${this.moveLesson(last.before, last.uci)}`
       : "";
     return playerLesson + opponentLesson;
   }
+  private languageControl(id: string) {
+    const options = lessonLanguages.map((language) => `<option value="${language}" ${this.state.settings.language === language ? "selected" : ""}>${languageNames[language]}</option>`).join("");
+    return `<div class="field-row guide-language"><label for="${id}">Lesson language / 教学语言</label><select id="${id}">${options}</select></div>`;
+  }
   private beginnerGuide() {
     if (!this.state.settings.guidance || this.game.history.length || this.player !== "w") return "";
-    const zh = this.state.settings.language === "zh";
-    const language = `<div class="field-row guide-language"><label for="guide-language">Language / 教学语言</label><select id="guide-language"><option value="en" ${zh ? "" : "selected"}>English</option><option value="zh" ${zh ? "selected" : ""}>简体中文</option></select></div>`;
-    if (zh) return `<section class="beginner-guide" aria-labelledby="beginner-guide-title"><div class="guide-topline"><span class="overline">从这里开始 · 无需基础</span><button type="button" class="guide-close" data-guidance-off aria-label="隐藏新手引导">×</button></div>${language}<h2 id="beginner-guide-title">走出第一步，就已经开始了</h2><p><b>目标是将杀：</b>攻击对方的王，让它没有任何合法方式解除将军。棋子规则中并不会真的吃掉王。</p><ol class="beginner-steps"><li><b>白方先行。</b>这一局你执白。</li><li><b>点选一个白棋。</b>小圆点表示合法落点；圆环表示可以吃子。</li><li><b>试试 e2 → e4。</b>这个兵占据中心格，也为象打开斜线。你也可以直接输入 <b>e4</b>。</li></ol><div class="button-row">${btn("beginner-e4", "试试 1. e4", "primary")}<button type="button" class="btn" data-guidance-off>隐藏引导</button></div><p class="helper">引导完全可选。随时可以在“数据与隐私”中重新开启。</p></section>`;
-    return `<section class="beginner-guide" aria-labelledby="beginner-guide-title"><div class="guide-topline"><span class="overline">START HERE · NO EXPERIENCE NEEDED</span><button type="button" class="guide-close" data-guidance-off aria-label="Hide beginner guidance">×</button></div>${language}<h2 id="beginner-guide-title">Your first move is enough</h2><p><b>The goal is checkmate:</b> attack the opposing king so it has no legal escape. You never actually capture the king.</p><ol class="beginner-steps"><li><b>White moves first.</b> You are White in this game.</li><li><b>Tap a white piece.</b> Small dots show where it can legally move; rings show captures.</li><li><b>Try e2 → e4.</b> This pawn takes a central square and opens a diagonal for your bishop. You can also type <b>e4</b>.</li></ol><div class="button-row">${btn("beginner-e4", "Try 1. e4", "primary")}<button type="button" class="btn" data-guidance-off>Hide guidance</button></div><p class="helper">Guidance is optional. Turn it back on any time in Data & Privacy.</p></section>`;
+    const copy = guideCopy[this.state.settings.language];
+    return `<section class="beginner-guide" aria-labelledby="beginner-guide-title"><div class="guide-topline"><span class="overline">${esc(copy.overline)}</span><button type="button" class="guide-close" data-guidance-off aria-label="${esc(copy.hideAria)}">×</button></div>${this.languageControl("guide-language")}<h2 id="beginner-guide-title">${esc(copy.title)}</h2><p><b>${esc(copy.goalLead)}</b> ${esc(copy.goal)}</p><ol class="beginner-steps"><li><b>${esc(copy.whiteLead)}</b> ${esc(copy.white)}</li><li><b>${esc(copy.tapLead)}</b> ${esc(copy.tap)}</li><li><b>${esc(copy.tryLead)}</b> ${esc(copy.tryText)}</li></ol><div class="button-row">${btn("beginner-e4", esc(copy.tryButton), "primary")}<button type="button" class="btn" data-guidance-off>${esc(copy.hide)}</button></div><p class="helper">${esc(copy.helper)}</p></section>`;
   }
   private openingLesson(index: number, san = this.currentOpening().moves[index]) {
     const line = this.currentOpening();
@@ -452,22 +455,16 @@ export class App {
     return this.moveLesson(game.fen(), san, purpose);
   }
   private blunderLesson(blunder: Blunder) {
-    const zh = this.state.settings.language === "zh";
-    if (zh && blunder.starter) {
-      const lessons: Record<string, string> = {
-        "example-0": "后沿斜线到 h4 将军，直指 e1 的王。白方过早推进 f 兵和 g 兵，暴露了王；此时没有任何合法着法能解除将军。",
-        "example-1": "后吃掉 f7 兵并将军，c4 象同时保护后。黑王无法解除这次攻击。要点是识别棋子协同，而不是以为早出后永远都好。",
-        "example-2": "车到 e8 将军。黑王被自己的 f7、g7、h7 兵困住，无法逃出底线。",
-      };
-      if (lessons[blunder.id]) return lessons[blunder.id];
+    const language = this.state.settings.language;
+    if (language !== "en" && blunder.starter) {
+      const translated = starterLessons[language][blunder.id];
+      if (translated) return translated;
     }
-    if (!zh && blunder.lesson) return blunder.lesson;
+    if (language === "en" && blunder.lesson) return blunder.lesson;
     try {
-      return explainMove(blunder.fen, blunder.best, this.state.settings.language).reasons.join(" ");
+      return explainMove(blunder.fen, blunder.best, language).reasons.join(" ");
     } catch {
-      return zh
-        ? "寻找让这步棋有效的具体将军、吃子或威胁。"
-        : "Look for the concrete check, capture, or threat that makes this continuation effective.";
+      return lessonCopy[language].genericBlunder;
     }
   }
   private applyTheme() {
@@ -475,7 +472,7 @@ export class App {
     document.body.dataset.theme = settings.theme;
     document.body.dataset.textSize = settings.largeText ? "large" : "standard";
     document.body.dataset.motion = settings.reduceMotion ? "reduce" : "system";
-    document.documentElement.lang = settings.language === "zh" ? "zh-CN" : "en";
+    document.documentElement.lang = languageTags[settings.language];
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColors[settings.theme]);
   }
   private render() {
@@ -801,9 +798,7 @@ export class App {
         if (best.san) {
           const language = this.state.settings.language;
           const preferred = explainMove(before, best.san, language);
-          this.coachLesson = `${preferred.reading} ${preferred.reasons.join(" ")} ${language === "zh"
-            ? "Stockfish 在当前搜索深度下更偏好这一步；这只是供你检验的搜索证据，不代表它知道人类棋手的意图。"
-            : "Stockfish preferred it at this search depth; that is evidence to inspect, not a claim about human intent."}`;
+          this.coachLesson = `${preferred.reading} ${preferred.reasons.join(" ")} ${lessonCopy[language].preferredSuffix}`;
         }
         if (best.bestMove && best.bestMove !== rec.uci) {
           this.lastArrow = { uci: best.bestMove, color: "green" };
@@ -888,8 +883,8 @@ export class App {
     );
     this.bind("beginner-e4", () => this.makePlayMove("e4"));
     this.onChange("guide-language", (value) => {
-      if (!["en", "zh"].includes(value)) return;
-      this.state.settings.language = value as "en" | "zh";
+      if (!lessonLanguages.includes(value as LessonLanguage)) return;
+      this.state.settings.language = value as LessonLanguage;
       this.saveSoon();
       this.render();
     });
@@ -1819,7 +1814,7 @@ export class App {
     const panel = this.panel(
       "Your data stays here",
       `${summary}<p>No game, position, or learning signal is sent to an analysis service. Current results are stored in this browser’s IndexedDB; a temporary practice snapshot is kept in local storage for 10 minutes. Clearing browser storage or uninstalling may remove them; export a backup first.</p>
-   <div class="button-row">${btn("export-backup", "Export JSON backup", "primary")}<label for="import-backup" class="btn">Import backup</label><input id="import-backup" class="sr-only" type="file" accept="application/json,.json"></div><p class="helper">Imports are validated before they replace or merge with current data.</p><div class="section-rule"></div><div class="field-row"><label for="theme-select">Colour theme</label><select id="theme-select">${themeOptions}</select></div><div class="field-row"><label for="language-select">Lesson language / 教学语言</label><select id="language-select"><option value="en" ${s.settings.language === "en" ? "selected" : ""}>English</option><option value="zh" ${s.settings.language === "zh" ? "selected" : ""}>简体中文</option></select></div><p class="helper">Chinese currently covers the first-game guide, generated move lessons, and starter Blunder Bank lessons. Authored opening notes, master commentary, and the wider interface remain English.</p><label class="check-line"><input id="setting-coords" type="checkbox" ${s.settings.coords ? "checked" : ""}> Show board coordinates</label><label class="check-line"><input id="setting-guidance" type="checkbox" ${s.settings.guidance ? "checked" : ""}> Beginner guidance and plain-language move lessons</label><p class="helper">Turn guidance off to hide onboarding and extended explanations. Core controls, answers, engine reviews, and progress remain available.</p><label class="check-line"><input id="setting-large-text" type="checkbox" ${s.settings.largeText ? "checked" : ""}> Larger interface text</label><label class="check-line"><input id="setting-reduce-motion" type="checkbox" ${s.settings.reduceMotion ? "checked" : ""}> Reduce animations and smooth scrolling</label><div class="section-rule"></div>${btn("clear-data", "Clear all local progress", "danger")}<div class="section-rule"></div><h3>Install & offline</h3><p class="status-message"><span class="status-dot"></span> ${this.online ? "Online" : "Offline"} · ${this.offlineReady ? "Offline assets ready" : "Preparing offline assets"}</p>${install}<p class="helper">The app shell, training content, chess.js, and Stockfish WASM are cached together after a successful first online visit. Keep this version cached before going offline.</p>`,
+   <div class="button-row">${btn("export-backup", "Export JSON backup", "primary")}<label for="import-backup" class="btn">Import backup</label><input id="import-backup" class="sr-only" type="file" accept="application/json,.json"></div><p class="helper">Imports are validated before they replace or merge with current data.</p><div class="section-rule"></div><div class="field-row"><label for="theme-select">Colour theme</label><select id="theme-select">${themeOptions}</select></div>${this.languageControl("language-select")}<p class="helper">Simplified Chinese, French, and Dutch cover the first-game guide, generated move lessons, and starter Blunder Bank lessons. Authored opening notes, master commentary, and the wider interface remain English.</p><label class="check-line"><input id="setting-coords" type="checkbox" ${s.settings.coords ? "checked" : ""}> Show board coordinates</label><label class="check-line"><input id="setting-guidance" type="checkbox" ${s.settings.guidance ? "checked" : ""}> Beginner guidance and plain-language move lessons</label><p class="helper">Turn guidance off to hide onboarding and extended explanations. Core controls, answers, engine reviews, and progress remain available.</p><label class="check-line"><input id="setting-large-text" type="checkbox" ${s.settings.largeText ? "checked" : ""}> Larger interface text</label><label class="check-line"><input id="setting-reduce-motion" type="checkbox" ${s.settings.reduceMotion ? "checked" : ""}> Reduce animations and smooth scrolling</label><div class="section-rule"></div>${btn("clear-data", "Clear all local progress", "danger")}<div class="section-rule"></div><h3>Install & offline</h3><p class="status-message"><span class="status-dot"></span> ${this.online ? "Online" : "Offline"} · ${this.offlineReady ? "Offline assets ready" : "Preparing offline assets"}</p>${install}<p class="helper">The app shell, training content, chess.js, and Stockfish WASM are cached together after a successful first online visit. Keep this version cached before going offline.</p>`,
       "PRIVACY BY DESIGN",
     );
     return `<div class="workspace-heading"><div><span class="overline">08 / DATA & PRIVACY</span><h1>Your Space</h1><p>Ownership includes the ability to leave with your records.</p></div></div><div class="settings-layout">${panel}<div class="panel"><span class="overline">IMPLEMENTATION STATUS</span><h2>Built to tell the truth</h2><p>This release uses mature chess rules and real local Stockfish analysis. Its learning path is explainable and evidence-bounded, not a claim of calibrated chess measurement.</p><div class="feature-status"><b>Included</b><p>Adaptive practice recommendations, timestamped learning history, six Stockfish tiers, live coaching, review turning points, opening SRS, four visual exercises, classical games, endgames, Blunder Bank, backup/restore, four colour themes, and a complete offline asset cache.</p><b>Still bounded</b><p>Opening coverage is a starter repertoire; calculation sequences train opening recall rather than certified tactics; endgames use objective-based practice without tablebase claims; reviews analyze your moves rather than every engine reply.</p></div></div></div>`;
@@ -1893,8 +1888,8 @@ export class App {
       this.applyTheme();
     });
     this.onChange("language-select", (value) => {
-      if (!["en", "zh"].includes(value)) return;
-      this.state.settings.language = value as "en" | "zh";
+      if (!lessonLanguages.includes(value as LessonLanguage)) return;
+      this.state.settings.language = value as LessonLanguage;
       this.saveSoon();
       this.render();
     });

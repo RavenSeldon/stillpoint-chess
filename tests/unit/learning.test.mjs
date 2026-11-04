@@ -95,12 +95,14 @@ test("guidance, lesson language, and reading preferences migrate and validate", 
   assert.equal(migrated.largeText, false);
   assert.equal(migrated.reduceMotion, false);
 
-  const customized = freshState();
-  Object.assign(customized.settings, { guidance: false, language: "zh", largeText: true, reduceMotion: true });
-  assert.deepEqual(validateSave(customized).settings, customized.settings);
+  for (const language of ["zh", "fr", "nl"]) {
+    const customized = freshState();
+    Object.assign(customized.settings, { guidance: false, language, largeText: true, reduceMotion: true });
+    assert.deepEqual(validateSave(customized).settings, customized.settings);
+  }
   for (const settings of [
     { guidance: "yes" },
-    { language: "fr" },
+    { language: "de" },
     { largeText: 1 },
     { reduceMotion: null },
   ]) assert.throws(() => validateSave({ ...freshState(), settings: { ...freshState().settings, ...settings } }));
