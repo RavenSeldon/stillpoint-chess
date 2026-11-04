@@ -5,16 +5,17 @@
 - Node.js 24.21.0; npm 11.12.1.
 - TypeScript 5.9.3 and Vite 8.3.5 installed locally and pinned.
 - chess.js 1.4.0 and Stockfish.js 19.0.1 Lite single-threaded installed locally and pinned.
-- Playwright 1.64.1 with Chromium 156.0.8078.4.
+- Playwright 1.64.1 with Chromium 156.0.8078.4 and WebKit 27.2.
 
 ## Observed checks
 
 | Check | Outcome |
 |---|---|
-| `npm run build` | PASS — strict TypeScript, Vite production bundle, generated service worker, 46 local assets precached |
+| `npm run build` | PASS — strict TypeScript, Vite production bundle, generated service worker, 47 local assets precached |
 | `npm run test:unit` | PASS — 54 passed, 0 failed; includes initial perft 20/400/8902, chess rules, English/Chinese/French/Dutch move explanations, authored-content coverage, PGN round trips, evaluation/mate parsing, SRS (including assisted review), knight BFS, backup/preference validation, adaptive learning (including tier-contextualized game evidence and due-blunder scheduling), rules-verified tactical pattern classification, and recovery validation/expiry |
-| `npm run test:static` | PASS — all 46 assets, Stockfish WASM, manifest, and icons served beneath `/sample-repository/` |
-| `npm run test:e2e` | PASS — 20 Chromium tests passed, 0 failed/skipped |
+| `npm run test:static` | PASS — all 47 assets, Stockfish WASM, manifest, and icons served beneath `/sample-repository/` |
+| `npm run test:e2e` | PASS — 24 tests per browser, 48 total: 24 Chromium + 24 WebKit, 0 failed/skipped |
+| Keyboard-only operation | PASS in Chromium and WebKit — skip link, all seven main views, move entry form, square selection, promotion chooser (including Escape cancel and underpromotion to rook) operated by keyboard alone; focus survives full app re-renders |
 | Real engine game and coach review | PASS — legal user move, real Stockfish reply, two move records, and review UI observed in Chromium |
 | Beginner teaching | PASS — first-game e4 action produced a real engine reply; separate learner/opponent lessons and the preferred-move explanation remained visible |
 | Optional guidance | PASS — dismissal removed extended lessons without disabling play; the preference survived reload and could be re-enabled |
@@ -77,11 +78,18 @@ The complete `npm run verify` sequence was executed successfully. Browser tests 
 - After an independent blunder repair, a transfer test offers the same verified idea in an unseen position — a personal game position first, then one of six authored puzzles whose declared patterns are re-verified at startup (`validateContent` fails loudly otherwise).
 - Transfer attempts are recorded separately (`transfer:<pattern>`), with assisted attempts distinguished from independent ones, so recognition, retention, and transfer remain three different measurements.
 
+## Cross-browser and keyboard pass
+
+- Playwright now runs every end-to-end test on both Chromium and WebKit; the full suite passes on both, including the offline service-worker reentry and Stockfish WASM play.
+- A keyboard regression suite covers skip-link and navigation traversal, both move-entry paths (form and board squares), the promotion chooser (all four pieces, Escape cancel, underpromotion), and focus preservation across re-renders.
+- Keyboard traversal testing exposed a real defect: after selecting a square, its legal targets sat up to ~70 tab stops away. The board now groups the selected square and its legal targets at the front of the tab order while a selection is active, so a legal destination is one or two stops away; all other squares remain reachable by continuing to tab.
+- WebKit keyboard tests drive traversal the way Safari users do without full keyboard access (Option+Tab); plain-Tab behavior is Safari's own platform default, not an app defect.
+
 ## Not verified or intentionally not claimed
 
 - Simplified Chinese, French, and Dutch localization is intentionally partial: authored opening/master notes and the wider interface remain English.
 - Generated move lessons explain observable chess facts; they do not claim to reconstruct a complete strategic plan or human intention from Stockfish output.
-- No physical phone, iOS/Safari, WebKit, low-memory device, or installed-app standalone session was tested.
+- Playwright WebKit (the Safari engine) now runs the full suite; a physical phone, real iOS/Safari device, low-memory device, or installed-app standalone session was still not tested.
 - Chromium’s native installation prompt was not accepted end-to-end; the app listens for the real prompt and provides a working action only when the browser supplies it.
 - Opening content remains a six-line starter repertoire with selected alternatives, not a complete opening tree.
 - Calculation exercises are opening-memory sequences, not certified unique tactical puzzles.

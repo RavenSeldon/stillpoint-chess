@@ -62,6 +62,15 @@ export class BoardView {
       button.dataset.square = square;
       button.title = square;
       button.setAttribute("aria-pressed", String(this.selected === square));
+      // Keyboard flow: while a square is selected, Tab must reach its legal
+      // targets in one or two stops, not after a ~70-stop lap of the board.
+      // Positive tabindex groups the selected square and its targets at the
+      // front of the page tab order (selected first, targets in board order);
+      // every other square stays reachable by continuing to tab.
+      if (this.selected && options.interactive !== false && options.onMove && !options.onSquare) {
+        if (this.selected === square) button.tabIndex = 1;
+        else if (targets.includes(square)) button.tabIndex = 2;
+      }
       const pieceName = piece
         ? (piece.color === "w" ? "White " : "Black ") +
           { p: "pawn", n: "knight", b: "bishop", r: "rook", q: "queen", k: "king" }[piece.type]
