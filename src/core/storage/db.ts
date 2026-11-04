@@ -26,6 +26,8 @@ export type Blunder = {
   /** Spaced-review state; absent on legacy records until their first scheduled solve. */
   intervalDays?: number;
   nextDueTimestamp?: number;
+  /** Verified tactical idea behind the correction; absent when unverifiable. */
+  pattern?: "mate-one" | "hanging-piece" | "fork";
 };
 export type SavedGame = {
   id: string;
@@ -114,7 +116,7 @@ export function validateSave(data: unknown): SaveState {
   if (!Array.isArray(x.blunders) || x.blunders.length > 3000) throw Error("Invalid blunders");
   p.blunders = x.blunders.map((raw: unknown) => {
     const b = raw as Blunder;
-    if (!b || typeof b.id !== "string" || typeof b.fen !== "string" || typeof b.best !== "string" || typeof b.bad !== "string" || !Number.isInteger(b.solved) || b.solved < 0 || typeof b.starter !== "boolean" || typeof b.title !== "string" || (b.lesson !== undefined && (typeof b.lesson !== "string" || b.lesson.length > 1200)) || (b.intervalDays !== undefined && (!Number.isFinite(b.intervalDays) || b.intervalDays < 0 || b.intervalDays > 365)) || (b.nextDueTimestamp !== undefined && (!Number.isFinite(b.nextDueTimestamp) || b.nextDueTimestamp < 0))) throw Error("Invalid blunder");
+    if (!b || typeof b.id !== "string" || typeof b.fen !== "string" || typeof b.best !== "string" || typeof b.bad !== "string" || !Number.isInteger(b.solved) || b.solved < 0 || typeof b.starter !== "boolean" || typeof b.title !== "string" || (b.lesson !== undefined && (typeof b.lesson !== "string" || b.lesson.length > 1200)) || (b.intervalDays !== undefined && (!Number.isFinite(b.intervalDays) || b.intervalDays < 0 || b.intervalDays > 365)) || (b.nextDueTimestamp !== undefined && (!Number.isFinite(b.nextDueTimestamp) || b.nextDueTimestamp < 0)) || (b.pattern !== undefined && !["mate-one", "hanging-piece", "fork"].includes(b.pattern))) throw Error("Invalid blunder");
     const test = new Chess(b.fen);
     test.move(b.best);
     new Chess(b.fen).move(b.bad);

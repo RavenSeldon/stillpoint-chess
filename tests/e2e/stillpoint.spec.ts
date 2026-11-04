@@ -303,6 +303,25 @@ test("starter Blunder Bank is nonjudgmental and reveals a concrete mate lesson",
   await expect(page.locator(".move-lesson ul")).toContainText("Checkmate:");
 });
 
+test("an independent blunder repair offers a verified transfer test", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await openPlay(page);
+  await page.getByRole("button", { name: "Blunder Bank" }).click();
+  await page.getByRole("textbox", { name: "Answer the blunder puzzle" }).fill("Qh4#");
+  await page.locator("#blunder-move-form button").click();
+  await expect(page.getByRole("button", { name: "Start transfer test" })).toBeVisible();
+  await page.getByRole("button", { name: "Start transfer test" }).click();
+  await expect(page.getByRole("heading", { name: "Transfer Test", exact: true })).toBeVisible();
+  await page.getByRole("textbox", { name: "Answer the transfer puzzle" }).fill("Qxf7#");
+  await page.locator("#transfer-move-form button").click();
+  await expect(page.locator(".panel")).toContainText("Transfer confirmed");
+  await expect(page.locator(".panel")).toContainText("strongest evidence of learning");
+  await page.getByRole("button", { name: "Back to Blunder Bank" }).click();
+  await expect(page.getByRole("heading", { name: "Blunder Bank" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test("mobile onboarding and move lessons avoid horizontal overflow", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openPlay(page);

@@ -1,4 +1,5 @@
 import {Chess,INITIAL_FEN} from '../core/chess/Chess.js';
+import {classifyPattern,type TacticPattern} from '../core/learning/patterns.js';
 export type Opening={id:string;title:string;side:'w'|'b';moves:string[];explanations:string[];idea:string;trap:string;alternatives?:Record<number,string[]>};
 export const openings:Opening[]=[
  {id:'italian',title:'Italian Game',side:'w',moves:'e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6 d3'.split(' '),explanations:[
@@ -98,15 +99,30 @@ export const calculations:Calculation[]=[
  {id:'calc8',intro:'Queen’s Gambit response',sequence:'c4 e6 Nc3 Nf6'.split(' '),answer:'Bg5',explanation:'The bishop develops and pins the f6 knight to the queen, adding indirect pressure to d5.',sourceLine:'queens'}
 ];
 export function calculationStart(c:Calculation){const g=new Chess();const line=openings.find(o=>o.id===c.sourceLine);if(!line)throw Error('Unknown source line');const start=line.moves.join(' ').indexOf(c.sequence.join(' '));if(start<0)throw Error('Calculation sequence absent');const prefix=line.moves.slice(0,line.moves.join(' ').slice(0,start).trim().split(/\s+/).filter(Boolean).length);for(const s of prefix)g.move(s);return g}
+export type TransferPuzzle={id:string;pattern:TacticPattern;fen:string;best:string;title:string;lesson:string};
+/**
+ * Transfer tests: the same verified tactical idea in a previously unseen
+ * position. Every declared pattern is re-verified from the rules at startup;
+ * a position whose claim cannot be verified fails validation loudly.
+ */
+export const transferPuzzles:TransferPuzzle[]=[
+ {id:'transfer-mate-1',pattern:'mate-one',fen:'r1bqk2r/pppp1ppp/2n5/2b1p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 0 1',best:'Qxf7#',title:'The battery lands',lesson:'The queen captures f7 with mate because the c4 bishop protects her. The idea is the coordinated battery, not the early queen raid itself.'},
+ {id:'transfer-mate-2',pattern:'mate-one',fen:'6k1/5ppp/8/8/8/8/5PPP/3Q2K1 w - - 0 1',best:'Qd8#',title:'The sealed back rank',lesson:'The queen reaches d8 with mate: the king is walled in by its own f7, g7, and h7 pawns and cannot answer the check.'},
+ {id:'transfer-hang-1',pattern:'hanging-piece',fen:'r1bqkb1r/pppp1ppp/4p3/8/3nP3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 1',best:'Nxd4',title:'The knight that walked alone',lesson:'The d4 knight has no defender: the e6 pawn covers d5, not d4, and the queen is blocked by her own d7 pawn. Count defenders before trusting a central outpost.'},
+ {id:'transfer-hang-2',pattern:'hanging-piece',fen:'r1bqk2r/pp1p1ppp/2n5/4p3/2b1P3/2N2N2/PPP1QPPP/R1B1KB1R w KQkq - 0 1',best:'Qxc4',title:'The bishop nobody watched',lesson:'The c4 bishop is attacked by the queen and defended by no one. Active squares still need protection.'},
+ {id:'transfer-fork-1',pattern:'fork',fen:'r1bqk2r/pp2pppp/2nb1n2/2p5/4P3/2N2N2/PPPP1PPP/R1BQKB1R w KQkq - 0 1',best:'e5',title:'One pawn, two targets',lesson:'The pawn advance attacks the d6 bishop and the f6 knight at once; Black cannot save both. Pawn forks are easy to overlook because pawns feel small.'},
+ {id:'transfer-fork-2',pattern:'fork',fen:'r1bqk2r/pp1p1ppp/2n5/1N2p3/4P3/8/PPPP1PPP/R1BQKBNR w KQkq - 0 1',best:'Nc7+',title:'The royal fork',lesson:'The knight checks the king from c7 while attacking the a8 rook; the check forces the issue and the rook is lost.'}
+];
 export function validateContent(){let n=0;for(const o of openings){if(o.explanations.length!==o.moves.length||o.explanations.some(text=>!text.trim()))throw Error('Every opening move needs an explanation: '+o.id);const g=new Chess();for(let i=0;i<o.moves.length;i++){const before=g.fen();g.move(o.moves[i]);for(const alt of o.alternatives?.[i]||[]){const branch=new Chess(before);branch.move(alt)}}n++}
  for(const m of masters){const g=new Chess().loadPgn(m.score);if(!g.history.length)throw Error('Empty master game');for(const note of m.notes){if(note.ply<0||note.ply>=g.history.length)throw Error('Master note outside game')};n++}
  for(const e of endgames){new Chess(e.fen);if(!['promote','mate','draw','win'].includes(e.success))throw Error('Endgame needs a measurable success condition: '+e.id);n++}
- for(const c of calculations){if(!c.explanation.trim())throw Error('Calculation needs an explanation: '+c.id);const g=calculationStart(c);for(const move of c.sequence)g.move(move);g.move(c.answer);n++}return n}
+ for(const c of calculations){if(!c.explanation.trim())throw Error('Calculation needs an explanation: '+c.id);const g=calculationStart(c);for(const move of c.sequence)g.move(move);g.move(c.answer);n++}
+ for(const t of transferPuzzles){new Chess(t.fen).move(t.best);if(classifyPattern(t.fen,t.best)!==t.pattern)throw Error('Transfer puzzle fails pattern verification: '+t.id);if(t.lesson.trim().length<50)throw Error('Transfer puzzle needs a concrete lesson: '+t.id);n++}return n}
 export function starterBlunders(){const a=new Chess().loadPgn('1. f3 e5 2. g4');const b=new Chess().loadPgn('1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6');const c=new Chess('6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1');
  const entries=[
   {g:a,best:'Qh4#',bad:'Nc6',title:'Fool’s Mate missed',lesson:'The queen reaches h4 with check along the diagonal to e1. White’s f- and g-pawn advances have exposed the king, and there is no legal answer to this check.'},
   {g:b,best:'Qxf7#',bad:'Qh3',title:'Scholar’s Mate missed',lesson:'The queen captures f7 with check while the c4 bishop protects her. Black’s king cannot answer the attack. The lesson is to notice the coordinated attack—not to assume early queen moves are always good.'},
   {g:c,best:'Re8#',bad:'Re2',title:'Back-rank mate missed',lesson:'The rook moves to e8 with check. Black’s king is trapped by its own f7, g7, and h7 pawns, with no legal escape from the back rank.'}
  ];
- return entries.map(({g,best,bad,title,lesson},i)=>{const test=new Chess(g.fen());const move=test.move(best);if(test.result()!==(g.turn==='w'?'1-0':'0-1'))throw Error('Starter mate is not checkmate: '+best);new Chess(g.fen()).move(bad);return {id:'example-'+i,fen:g.fen(),bad,best:move.san,solved:0,starter:true,title,lesson}})
+ return entries.map(({g,best,bad,title,lesson},i)=>{const test=new Chess(g.fen());const move=test.move(best);if(test.result()!==(g.turn==='w'?'1-0':'0-1'))throw Error('Starter mate is not checkmate: '+best);new Chess(g.fen()).move(bad);return {id:'example-'+i,fen:g.fen(),bad,best:move.san,solved:0,starter:true,title,lesson,pattern:'mate-one' as const}})
 }

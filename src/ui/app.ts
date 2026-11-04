@@ -37,7 +37,10 @@ import {
   endgames,
   validateContent,
   starterBlunders,
+  transferPuzzles,
+  type TransferPuzzle,
 } from "../data/content.js";
+import { classifyPattern, patternLabels } from "../core/learning/patterns.js";
 import { BoardView, type BlindTier } from "./board.js";
 const esc = (s: unknown) =>
   String(s).replace(
@@ -169,6 +172,8 @@ export class App {
   private analysisProgress = "";
   private blunderBusy = false;
   private blunderHinted = false;
+  private transfer: { puzzle: TransferPuzzle; hinted: boolean; feedback: string; showLesson: boolean } | null = null;
+  private transferOffer: TransferPuzzle | null = null;
   private gym: "coordinates" | "color" | "knight" | "calculation" =
     "coordinates";
   private sprintRemaining = 60;
@@ -890,9 +895,23 @@ export class App {
       timestamp: Date.now(),
       intervalDays: 0,
       nextDueTimestamp: Date.now(),
+      pattern: classifyPattern(before, bestUci) ?? undefined,
     });
     this.state.blunders = this.state.blunders.slice(0, 500);
     this.saveSoon();
+  }
+  /**
+   * Find a transfer test for a solved pattern: the same verified idea in a
+   * position the learner has not just memorized. Personal games first, then
+   * the authored verified set; nothing is offered without a verified pattern.
+   */
+  private findTransfer(pattern: NonNullable<Blunder["pattern"]>, excludeFen: string): TransferPuzzle | null {
+    const personal = this.state.blunders.find(
+      (item) => !item.starter && item.pattern === pattern && item.fen !== excludeFen,
+    );
+    if (personal)
+      return { id: personal.id, pattern, fen: personal.fen, best: personal.best, title: personal.title, lesson: personal.lesson || "" };
+    return transferPuzzles.find((puzzle) => puzzle.pattern === pattern && puzzle.fen !== excludeFen) || null;
   }
   /** Post-game review for games played with the live coach off: analyze after play, retrieve before reveal. */
   private async analyzeFinishedGame() {
@@ -1811,7 +1830,59 @@ export class App {
       this.makePlayMove(s);
     });
   }
+  /**
+   * Shared honesty for tactical answers: accept the stored continuation, any
+   * rule-verified checkmate, or an engine-verified equivalent under identical
+   * search limits. Without the engine, say so instead of guessing.
+   */
+  private async verifyTacticalAnswer(
+    fen: string,
+    best: string,
+    attempt: string,
+  ): Promise<{ mode: "exact" | "mate" | "equivalent" | "wrong" | "unverified" | "illegal"; san?: string }> {
+    const test = new Chess(fen);
+    let got;
+    try {
+      got = test.move(attempt);
+    } catch {
+      return { mode: "illegal" };
+    }
+    if (got.san.replace(/[+#]$/, "") === best.replace(/[+#]$/, "")) return { mode: "exact", san: got.san };
+    const outcome = test.result();
+    if (outcome && outcome !== "1/2-1/2") return { mode: "mate", san: got.san };
+    try {
+      const mover = fen.split(" ")[1] as Color;
+      const bestGame = new Chess(fen);
+      bestGame.move(best);
+      const rev = this.revision;
+      const afterBest = await this.engine.evaluatePosition(bestGame.fen(), 2);
+      if (rev !== this.revision) return { mode: "unverified" };
+      const afterGot = await this.engine.evaluatePosition(test.fen(), 2);
+      if (rev !== this.revision) return { mode: "unverified" };
+      const winBest = cpToWinProbability(scoreForSide(afterBest.score, mover));
+      const winGot = cpToWinProbability(scoreForSide(afterGot.score, mover));
+      return { mode: winGot >= winBest - 3 ? "equivalent" : "wrong", san: got.san };
+    } catch {
+      return { mode: "unverified" };
+    }
+  }
   private blundersHtml() {
+    if (this.transfer) {
+      const t = this.transfer;
+      const side = this.panel(
+        "Transfer test",
+        `<p>You repaired the <b>${esc(patternLabels[t.puzzle.pattern])}</b> pattern. Recognition is not yet understanding: here is a <b>new position</b> carrying the same idea. Solve it without help to show transfer.</p><form id="transfer-move-form" class="inline-form"><input id="transfer-move" aria-label="Answer the transfer puzzle" placeholder="Best move, SAN or UCI" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn primary" type="submit">Check</button></form><p class="helper">${esc(t.feedback || "The board also accepts a tap or drag.")}</p>${t.showLesson ? this.moveLesson(t.puzzle.fen, t.puzzle.best, t.puzzle.lesson) : ""}<div class="button-row">${btn("transfer-hint", "Reveal & explain")}${btn("transfer-exit", "Back to Blunder Bank")}</div>`,
+        "SAME IDEA · NEW POSITION",
+      );
+      return this.layout(
+        "Transfer Test",
+        "05 / BLUNDERS",
+        "Solving an unseen position is stronger evidence than repeating a remembered one.",
+        this.boardShell(`<span>TRANSFER · ${esc(patternLabels[t.puzzle.pattern]).toUpperCase()}</span><span>${esc(t.puzzle.title)}</span>`),
+        side,
+        "Transfer puzzles are verified from the rules at startup; unverifiable claims are never presented as patterns.",
+      );
+    }
     const b =
       this.state.blunders.find((p) => p.id === this.blunderId) ||
       this.state.blunders[0];
@@ -1834,7 +1905,7 @@ export class App {
       .join("");
     const side = this.panel(
       "Repair the pattern",
-      `<p>${b.starter ? "This is a practice pattern, not one of your mistakes. Find checkmate in one move." : "This position came from your game. Look for a stronger continuation, without rushing."}</p><p class="coach-box">${b.starter ? "In the played example" : "In your game"}, the move was <b>${esc(b.bad)}</b>. Look for checks, captures, and immediate threats. You can reveal the answer and its lesson whenever you are ready.</p><form id="blunder-move-form" class="inline-form"><input id="blunder-move" aria-label="Answer the blunder puzzle" placeholder="Best move, SAN or UCI"><button class="btn primary" type="submit">Check</button></form><p class="helper">${esc(this.blunderFeedback || "Think before moving. The board also accepts a tap or drag.")}</p>${this.blunderShowLesson ? this.moveLesson(b.fen, b.best, this.blunderLesson(b)) : ""}<div class="button-row">${btn("blunder-hint", "Reveal & explain")}${btn("blunder-delete", "Delete record")}</div><div class="section-rule"></div><h3>Review queue · ${this.state.blunders.length}</h3><div class="bank-list">${list}</div>`,
+      `<p>${b.starter ? "This is a practice pattern, not one of your mistakes. Find checkmate in one move." : "This position came from your game. Look for a stronger continuation, without rushing."}</p><p class="coach-box">${b.starter ? "In the played example" : "In your game"}, the move was <b>${esc(b.bad)}</b>. Look for checks, captures, and immediate threats. You can reveal the answer and its lesson whenever you are ready.</p><form id="blunder-move-form" class="inline-form"><input id="blunder-move" aria-label="Answer the blunder puzzle" placeholder="Best move, SAN or UCI"><button class="btn primary" type="submit">Check</button></form><p class="helper">${esc(this.blunderFeedback || "Think before moving. The board also accepts a tap or drag.")}</p>${this.blunderShowLesson ? this.moveLesson(b.fen, b.best, this.blunderLesson(b)) : ""}<div class="button-row">${btn("blunder-hint", "Reveal & explain")}${btn("blunder-delete", "Delete record")}</div>${this.transferOffer ? `<div class="section-rule"></div><p class="decision-note">Pattern repaired independently. Stronger evidence comes next: solve the same <b>${esc(patternLabels[this.transferOffer.pattern])}</b> idea in a position you have never seen.</p><div class="button-row">${btn("transfer-start", "Start transfer test", "primary")}</div>` : ""}<div class="section-rule"></div><h3>Review queue · ${this.state.blunders.length}</h3><div class="bank-list">${list}</div>`,
       "PATTERNS, NOT PUNISHMENT",
     );
     return this.layout(
@@ -1849,6 +1920,61 @@ export class App {
     );
   }
   private wireBlunders() {
+    if (this.transfer) {
+      const t = this.transfer;
+      const game = new Chess(t.puzzle.fen);
+      this.player = game.turn;
+      this.lastArrow = null;
+      const solveTransfer = async (attempt: string) => {
+        if (this.blunderBusy) return;
+        this.blunderBusy = true;
+        try {
+          t.showLesson = false;
+          const verdict = await this.verifyTacticalAnswer(t.puzzle.fen, t.puzzle.best, attempt);
+          if (verdict.mode === "illegal") {
+            t.feedback = "That move is illegal in this position.";
+          } else if (verdict.mode === "wrong" || verdict.mode === "unverified") {
+            t.feedback = verdict.mode === "unverified"
+              ? `${verdict.san} is legal, but only the stored continuation ${t.puzzle.best} can be checked without the engine.`
+              : `${verdict.san} is legal, but the ${patternLabels[t.puzzle.pattern]} idea is still here. Look again.`;
+            this.recordLearning("tactics", false, `transfer:${t.puzzle.pattern}`);
+          } else {
+            const independent = !t.hinted;
+            t.showLesson = true;
+            t.feedback = (verdict.mode === "exact"
+              ? `Transfer confirmed: ${t.puzzle.best}.`
+              : verdict.mode === "mate"
+                ? `Verified by the rules: ${verdict.san} also delivers checkmate.`
+                : `Verified equivalent: ${verdict.san} holds under identical search limits.`) +
+              (independent
+                ? " You recognized the idea in a position you had never seen—the strongest evidence of learning this dojo measures."
+                : " Solved with a hint; a later independent transfer attempt will count for more.");
+            this.recordLearning("tactics", independent, `transfer:${t.puzzle.pattern}${independent ? "" : "#assisted"}`);
+            this.saveSoon();
+          }
+          this.announce(t.feedback);
+          this.render();
+        } finally {
+          this.blunderBusy = false;
+        }
+      };
+      this.boardRender(game, true, { blind: "standard", onMove: (uci: string) => void solveTransfer(uci) });
+      $("transfer-move-form")?.addEventListener("submit", (event) => {
+        event.preventDefault();
+        void solveTransfer(($("transfer-move") as HTMLInputElement).value);
+      });
+      this.bind("transfer-hint", () => {
+        t.hinted = true;
+        t.showLesson = true;
+        t.feedback = `The move is ${t.puzzle.best}. Read the idea below; an independent attempt counts for more.`;
+        this.render();
+      });
+      this.bind("transfer-exit", () => {
+        this.transfer = null;
+        this.render();
+      });
+      return;
+    }
     const b =
       this.state.blunders.find((p) => p.id === this.blunderId) ||
       this.state.blunders[0];
@@ -1861,45 +1987,17 @@ export class App {
       this.blunderBusy = true;
       this.blunderShowLesson = false;
       try {
-        const test = new Chess(b.fen);
-        let got;
-        try {
-          got = test.move(attempt);
-        } catch {
+        const verdict = await this.verifyTacticalAnswer(b.fen, b.best, attempt);
+        if (verdict.mode === "illegal") {
           this.blunderFeedback = "That move is illegal in this position. Try a move shown by selecting one of your pieces.";
           this.announce(this.blunderFeedback);
           this.render();
           return;
         }
-        const mover = b.fen.split(" ")[1] as Color;
-        // Accept the stored continuation, any verified mate, or an engine-verified
-        // equivalent; never punish a defensible alternative we failed to check.
-        let mode: "exact" | "mate" | "equivalent" | "unverified" | "wrong" = "wrong";
-        if (got.san.replace(/[+#]$/, "") === b.best.replace(/[+#]$/, "")) mode = "exact";
-        else {
-          const outcome = test.result();
-          if (outcome && outcome !== "1/2-1/2") mode = "mate";
-          else {
-            try {
-              const bestGame = new Chess(b.fen);
-              bestGame.move(b.best);
-              const rev = this.revision;
-              const afterBest = await this.engine.evaluatePosition(bestGame.fen(), 2);
-              if (rev !== this.revision) return;
-              const afterGot = await this.engine.evaluatePosition(test.fen(), 2);
-              if (rev !== this.revision) return;
-              const winBest = cpToWinProbability(scoreForSide(afterBest.score, mover));
-              const winGot = cpToWinProbability(scoreForSide(afterGot.score, mover));
-              mode = winGot >= winBest - 3 ? "equivalent" : "wrong";
-            } catch {
-              mode = "unverified";
-            }
-          }
-        }
-        if (mode === "wrong" || mode === "unverified") {
-          this.blunderFeedback = mode === "unverified"
-            ? `${got.san} is legal, but only the stored continuation ${b.best} can be checked without the engine. Treat this as recalling one specified move.`
-            : `${got.san} is legal, but it misses this puzzle’s tactical point. Reconsider checks, captures, and immediate threats.`;
+        if (verdict.mode === "wrong" || verdict.mode === "unverified") {
+          this.blunderFeedback = verdict.mode === "unverified"
+            ? `${verdict.san} is legal, but only the stored continuation ${b.best} can be checked without the engine. Treat this as recalling one specified move.`
+            : `${verdict.san} is legal, but it misses this puzzle’s tactical point. Reconsider checks, captures, and immediate threats.`;
           this.recordLearning("tactics", false, b.id);
           this.announce(this.blunderFeedback);
           this.render();
@@ -1913,15 +2011,18 @@ export class App {
         } else b.intervalDays = Math.max(1, b.intervalDays || 0);
         b.nextDueTimestamp = Date.now() + b.intervalDays * 86_400_000;
         this.blunderShowLesson = true;
-        const verifiedNote = mode === "mate"
-          ? `Verified by the rules: ${got.san} also delivers checkmate.`
-          : mode === "equivalent"
-            ? `Verified equivalent: ${got.san} holds the same evaluation as ${b.best} under identical search limits.`
+        const verifiedNote = verdict.mode === "mate"
+          ? `Verified by the rules: ${verdict.san} also delivers checkmate.`
+          : verdict.mode === "equivalent"
+            ? `Verified equivalent: ${verdict.san} holds the same evaluation as ${b.best} under identical search limits.`
             : `Correct: ${b.best}.`;
         this.blunderFeedback = verifiedNote + (independent
           ? this.state.settings.guidance ? " The lesson below explains the concrete resource." : ""
           : " Solved with a hint—an independent retry is scheduled soon; only independent solves advance the interval.");
         this.recordLearning("tactics", independent, b.id + (independent ? "" : "#assisted"));
+        // Retention proven here offers the transfer test: same idea, unseen position.
+        if (independent && b.pattern)
+          this.transferOffer = this.findTransfer(b.pattern, b.fen);
         this.saveSoon();
         this.announce(this.blunderFeedback);
         this.render();
@@ -1940,6 +2041,13 @@ export class App {
       this.blunderFeedback = `The move is ${b.best}.${this.state.settings.guidance ? " Read the idea below, then try it from this position later." : ""}`;
       this.render();
     });
+    this.bind("transfer-start", () => {
+      if (!this.transferOffer) return;
+      this.transfer = { puzzle: this.transferOffer, hinted: false, feedback: "", showLesson: false };
+      this.transferOffer = null;
+      this.announce(`Transfer test: find the ${patternLabels[this.transfer.puzzle.pattern]} in a new position`);
+      this.render();
+    });
     this.bind("blunder-delete", () => {
       if (!confirm("Delete this blunder record?")) return;
       this.state.blunders = this.state.blunders.filter((p) => p.id !== b.id);
@@ -1947,6 +2055,8 @@ export class App {
       this.blunderFeedback = "";
       this.blunderShowLesson = false;
       this.blunderHinted = false;
+      this.transfer = null;
+      this.transferOffer = null;
       this.saveSoon();
       this.render();
     });
@@ -1956,6 +2066,8 @@ export class App {
         this.blunderFeedback = "";
         this.blunderShowLesson = false;
         this.blunderHinted = false;
+        this.transfer = null;
+        this.transferOffer = null;
         this.render();
       }),
     );

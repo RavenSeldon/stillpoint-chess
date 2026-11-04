@@ -11,10 +11,10 @@
 
 | Check | Outcome |
 |---|---|
-| `npm run build` | PASS — strict TypeScript, Vite production bundle, generated service worker, 44 local assets precached |
-| `npm run test:unit` | PASS — 51 passed, 0 failed; includes initial perft 20/400/8902, chess rules, English/Chinese/French/Dutch move explanations, authored-content coverage, PGN round trips, evaluation/mate parsing, SRS (including assisted review), knight BFS, backup/preference validation, adaptive learning (including tier-contextualized game evidence and due-blunder scheduling), and recovery validation/expiry |
-| `npm run test:static` | PASS — all 44 assets, Stockfish WASM, manifest, and icons served beneath `/sample-repository/` |
-| `npm run test:e2e` | PASS — 19 Chromium tests passed, 0 failed/skipped |
+| `npm run build` | PASS — strict TypeScript, Vite production bundle, generated service worker, 46 local assets precached |
+| `npm run test:unit` | PASS — 54 passed, 0 failed; includes initial perft 20/400/8902, chess rules, English/Chinese/French/Dutch move explanations, authored-content coverage, PGN round trips, evaluation/mate parsing, SRS (including assisted review), knight BFS, backup/preference validation, adaptive learning (including tier-contextualized game evidence and due-blunder scheduling), rules-verified tactical pattern classification, and recovery validation/expiry |
+| `npm run test:static` | PASS — all 46 assets, Stockfish WASM, manifest, and icons served beneath `/sample-repository/` |
+| `npm run test:e2e` | PASS — 20 Chromium tests passed, 0 failed/skipped |
 | Real engine game and coach review | PASS — legal user move, real Stockfish reply, two move records, and review UI observed in Chromium |
 | Beginner teaching | PASS — first-game e4 action produced a real engine reply; separate learner/opponent lessons and the preferred-move explanation remained visible |
 | Optional guidance | PASS — dismissal removed extended lessons without disabling play; the preference survived reload and could be re-enabled |
@@ -70,6 +70,12 @@ The complete `npm run verify` sequence was executed successfully. Browser tests 
 - Pawn promotion now asks which piece to promote to (queen, rook, bishop, or knight) instead of silently defaulting to a queen, with keyboard access and Escape to cancel.
 - Keyboard focus is preserved across re-renders of both the app shell and the board.
 - The document language stays English; only translated lesson and guide sections carry their own `lang` tags, instead of retagging the whole untranslated interface.
+
+## The transfer test (Learning Loop completion)
+
+- Blunders captured from play are tagged with a tactical pattern only when the pattern verifies from the rules alone: mate in one, loose material (undefended, or defended only by the king with the capturing piece protected), or a fork (the moved piece alone attacking two targets of at least minor-piece value). Unverifiable positions stay untagged.
+- After an independent blunder repair, a transfer test offers the same verified idea in an unseen position — a personal game position first, then one of six authored puzzles whose declared patterns are re-verified at startup (`validateContent` fails loudly otherwise).
+- Transfer attempts are recorded separately (`transfer:<pattern>`), with assisted attempts distinguished from independent ones, so recognition, retention, and transfer remain three different measurements.
 
 ## Not verified or intentionally not claimed
 

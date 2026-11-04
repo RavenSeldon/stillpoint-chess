@@ -127,6 +127,11 @@ export class Chess {
     throw Error("isAttacked is intentionally not exposed by the chess.js facade");
   }
 
+  /** Squares of `by` pieces attacking the named square (algebraic, e.g. "e4"). */
+  attackersOf(name: string, by: Color): string[] {
+    return this.inner.attackers(name as Square, by) as string[];
+  }
+
   legalMoves(): Move[] {
     return this.inner.moves({ verbose: true }).map(toInternalMove);
   }
