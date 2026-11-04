@@ -540,3 +540,22 @@ test("Learning Path measures independent recall, retention, and transfer honestl
   await expect(metrics).toContainText("1/1"); // delayed retention and transfer
   await expect(page.getByText(/used a hint and is counted separately/)).toBeVisible();
 });
+
+test("language switching is visibly effective where it is changed", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Data & Privacy" }).click();
+
+  // Regression: switching here once changed zero visible text on this screen.
+  const preview = page.locator(".language-preview");
+  await expect(preview).toHaveAttribute("lang", "en");
+  await expect(preview).toContainText("Your first move is enough");
+  await page.locator("#language-select").selectOption("zh");
+  await expect(preview).toHaveAttribute("lang", "zh-CN");
+  await expect(preview).toContainText("走出第一步，就已经开始了");
+  await expect(page.locator("main")).toContainText("覆盖首局引导");
+  await expect(page.locator("#live")).toContainText("简体中文");
+
+  // And the choice still reaches the places the scope note promises.
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "走出第一步，就已经开始了" })).toBeVisible();
+});

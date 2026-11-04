@@ -146,6 +146,18 @@ export const lessonCopy: Record<LessonLanguage, {
   },
 };
 
+/**
+ * Shown next to the language selector so the coverage of each language is
+ * explained in that language itself — a learner should not need English to
+ * learn what English is still required for.
+ */
+export const scopeNotes: Record<LessonLanguage, string> = {
+  en: "Simplified Chinese, French, and Dutch cover the first-game guide, generated move lessons, and starter Blunder Bank lessons. Authored opening notes, master commentary, and the wider interface remain English.",
+  zh: "简体中文、法语和荷兰语内容覆盖首局引导、生成的着法讲解，以及 Blunder Bank 入门课程。开局笔记、大师对局评注和其余界面仍为英文。",
+  fr: "Le chinois simplifié, le français et le néerlandais couvrent le guide de la première partie, les explications de coups générées et les leçons d’introduction de la Blunder Bank. Les notes d’ouverture rédigées, les commentaires des maîtres et le reste de l’interface restent en anglais.",
+  nl: "Vereenvoudigd Chinees, Frans en Nederlands dekken de gids bij de eerste partij, de gegenereerde zetuitleg en de introductielessen van de Blunder Bank. De geschreven openingsnotities, meestercommentaren en de rest van de interface blijven Engels.",
+};
+
 export const starterLessons: Record<"zh" | "fr" | "nl", Record<string, string>> = {
   zh: {
     "example-0": "后沿斜线到 h4 将军，直指 e1 的王。白方过早推进 f 兵和 g 兵，暴露了王；此时没有任何合法着法能解除将军。",

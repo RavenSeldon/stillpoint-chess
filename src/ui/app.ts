@@ -28,7 +28,7 @@ import { PRACTICE_RECOVERY_KEY, parsePracticeRecovery } from "../core/storage/re
 import { freshSrs, due, review, reviewAssisted } from "../core/srs/scheduler.js";
 import { buildLearningEvidence, buildLearningProfile, type Recommendation } from "../core/learning/engine.js";
 import { explainMove } from "../core/learning/explanations.js";
-import { guideCopy, languageNames, languageTags, lessonCopy, lessonLanguages, starterLessons, type LessonLanguage } from "../core/learning/languages.js";
+import { guideCopy, languageNames, languageTags, lessonCopy, lessonLanguages, scopeNotes, starterLessons, type LessonLanguage } from "../core/learning/languages.js";
 import {
   openings,
   masters,
@@ -470,6 +470,26 @@ export class App {
   private languageControl(id: string) {
     const options = lessonLanguages.map((language) => `<option value="${language}" ${this.state.settings.language === language ? "selected" : ""}>${languageNames[language]}</option>`).join("");
     return `<div class="field-row guide-language"><label for="${id}">Lesson language / 教学语言</label><select id="${id}">${options}</select></div>`;
+  }
+
+  /**
+   * Proof, at the exact spot the setting changes, that the choice took
+   * effect: a live sample of the chosen language's actual lesson copy.
+   * Without this the switch altered nothing on this screen, which read as
+   * "the setting does nothing".
+   */
+  private languagePreviewHtml() {
+    const language = this.state.settings.language;
+    const copy = guideCopy[language];
+    return `<div class="language-preview" lang="${esc(languageTags[language])}"><span class="overline">LESSON PREVIEW</span><b>${esc(copy.title)}</b><p><b>${esc(copy.goalLead)}</b> ${esc(copy.goal)}</p></div>`;
+  }
+
+  private setLessonLanguage(value: string) {
+    if (!lessonLanguages.includes(value as LessonLanguage)) return;
+    this.state.settings.language = value as LessonLanguage;
+    this.saveSoon();
+    this.announce(`${languageNames[this.state.settings.language]} · ${guideCopy[this.state.settings.language].title}`);
+    this.render();
   }
   private beginnerGuide() {
     if (!this.state.settings.guidance || this.game.history.length || this.player !== "w") return "";
@@ -1113,12 +1133,7 @@ export class App {
         this.render();
       }),
     );
-    this.onChange("guide-language", (value) => {
-      if (!lessonLanguages.includes(value as LessonLanguage)) return;
-      this.state.settings.language = value as LessonLanguage;
-      this.saveSoon();
-      this.render();
-    });
+    this.onChange("guide-language", (value) => this.setLessonLanguage(value));
     this.onChange("side-choice", (s) => {
       this.player =
         s === "random" ? (Math.random() < 0.5 ? "w" : "b") : (s as Color);
@@ -2222,7 +2237,7 @@ export class App {
     const panel = this.panel(
       "Your data stays here",
       `${summary}<p>No game, position, or learning signal is sent to an analysis service. Current results are stored in this browser’s IndexedDB; a temporary practice snapshot is kept in local storage for 10 minutes. Clearing browser storage or uninstalling may remove them; export a backup first.</p>
-   <div class="button-row">${btn("export-backup", "Export JSON backup", "primary")}<label for="import-backup" class="btn">Import backup</label><input id="import-backup" class="sr-only" type="file" accept="application/json,.json"></div><p class="helper">Imports are validated before they replace or merge with current data.</p><div class="section-rule"></div><div class="field-row"><label for="theme-select">Colour theme</label><select id="theme-select">${themeOptions}</select></div>${this.languageControl("language-select")}<p class="helper">Simplified Chinese, French, and Dutch cover the first-game guide, generated move lessons, and starter Blunder Bank lessons. Authored opening notes, master commentary, and the wider interface remain English.</p><label class="check-line"><input id="setting-coords" type="checkbox" ${s.settings.coords ? "checked" : ""}> Show board coordinates</label><label class="check-line"><input id="setting-guidance" type="checkbox" ${s.settings.guidance ? "checked" : ""}> Beginner guidance and plain-language move lessons</label><p class="helper">Turn guidance off to hide onboarding and extended explanations. Core controls, answers, engine reviews, and progress remain available.</p><label class="check-line"><input id="setting-large-text" type="checkbox" ${s.settings.largeText ? "checked" : ""}> Larger interface text</label><label class="check-line"><input id="setting-reduce-motion" type="checkbox" ${s.settings.reduceMotion ? "checked" : ""}> Reduce animations and smooth scrolling</label><div class="section-rule"></div>${btn("clear-data", "Clear all local progress", "danger")}<div class="section-rule"></div>${this.installHtml()}`,
+   <div class="button-row">${btn("export-backup", "Export JSON backup", "primary")}<label for="import-backup" class="btn">Import backup</label><input id="import-backup" class="sr-only" type="file" accept="application/json,.json"></div><p class="helper">Imports are validated before they replace or merge with current data.</p><div class="section-rule"></div><div class="field-row"><label for="theme-select">Colour theme</label><select id="theme-select">${themeOptions}</select></div>${this.languageControl("language-select")}${this.languagePreviewHtml()}<p class="helper" lang="${esc(languageTags[this.state.settings.language])}">${esc(scopeNotes[this.state.settings.language])}</p><label class="check-line"><input id="setting-coords" type="checkbox" ${s.settings.coords ? "checked" : ""}> Show board coordinates</label><label class="check-line"><input id="setting-guidance" type="checkbox" ${s.settings.guidance ? "checked" : ""}> Beginner guidance and plain-language move lessons</label><p class="helper">Turn guidance off to hide onboarding and extended explanations. Core controls, answers, engine reviews, and progress remain available.</p><label class="check-line"><input id="setting-large-text" type="checkbox" ${s.settings.largeText ? "checked" : ""}> Larger interface text</label><label class="check-line"><input id="setting-reduce-motion" type="checkbox" ${s.settings.reduceMotion ? "checked" : ""}> Reduce animations and smooth scrolling</label><div class="section-rule"></div>${btn("clear-data", "Clear all local progress", "danger")}<div class="section-rule"></div>${this.installHtml()}`,
       "PRIVACY BY DESIGN",
     );
     return `<div class="workspace-heading"><div><span class="overline">08 / DATA & PRIVACY</span><h1>Your Space</h1><p>Ownership includes the ability to leave with your records.</p></div></div><div class="settings-layout">${panel}<div class="panel"><span class="overline">IMPLEMENTATION STATUS</span><h2>Built to tell the truth</h2><p>This release uses mature chess rules and real local Stockfish analysis. Its learning path is explainable and evidence-bounded, not a claim of calibrated chess measurement.</p><div class="feature-status"><b>Included</b><p>Adaptive practice recommendations, timestamped learning history, six Stockfish tiers, live coaching, review turning points, opening SRS, four visual exercises, classical games, endgames, Blunder Bank, backup/restore, four colour themes, and a complete offline asset cache.</p><b>Still bounded</b><p>Opening coverage is a starter repertoire; calculation sequences train opening recall rather than certified tactics; endgames use objective-based practice without tablebase claims; reviews analyze your moves rather than every engine reply.</p></div></div></div>`;
@@ -2306,12 +2321,7 @@ export class App {
       this.saveSoon();
       this.applyTheme();
     });
-    this.onChange("language-select", (value) => {
-      if (!lessonLanguages.includes(value as LessonLanguage)) return;
-      this.state.settings.language = value as LessonLanguage;
-      this.saveSoon();
-      this.render();
-    });
+    this.onChange("language-select", (value) => this.setLessonLanguage(value));
     for (const [id, key] of [["setting-large-text", "largeText"], ["setting-reduce-motion", "reduceMotion"]] as const) {
       const control = $(id) as HTMLInputElement | null;
       if (control) control.onchange = () => {

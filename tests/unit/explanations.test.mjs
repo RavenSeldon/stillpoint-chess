@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Chess, INITIAL_FEN } from "../../dist/assets/core/chess/Chess.js";
 import { explainMove } from "../../dist/assets/core/learning/explanations.js";
+import { guideCopy, lessonLanguages, scopeNotes } from "../../dist/assets/core/learning/languages.js";
 
 function beforePgn(pgn) {
   return new Chess().loadPgn(pgn).fen();
@@ -75,4 +76,14 @@ test("castling and promotion explain the actual transformation", () => {
 test("illegal moves cannot receive a fabricated explanation", () => {
   assert.throws(() => explainMove(INITIAL_FEN, "e5"), /Illegal move/);
   assert.throws(() => explainMove(INITIAL_FEN, "Ke2"), /Illegal move/);
+});
+
+test("every lesson language has a scope note and guide copy in its own language", () => {
+  for (const language of lessonLanguages) {
+    assert.ok(scopeNotes[language] && scopeNotes[language].length > 40, `scope note missing for ${language}`);
+    assert.ok(guideCopy[language].title.length > 3, `guide title missing for ${language}`);
+  }
+  assert.ok(/[一-鿿]/.test(scopeNotes.zh), "Chinese scope note must actually be Chinese");
+  assert.ok(/[一-鿿]/.test(guideCopy.zh.title), "Chinese preview must actually be Chinese");
+  assert.ok(!/[一-鿿]/.test(scopeNotes.en) && !/[一-鿿]/.test(scopeNotes.fr) && !/[一-鿿]/.test(scopeNotes.nl));
 });
