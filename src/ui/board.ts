@@ -190,7 +190,7 @@ export class BoardView {
     const positionKey = `${fen}|${lastMove}`;
     if (positionKey === lastAnimatedPosition) return;
     lastAnimatedPosition = positionKey;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (document.body.dataset.motion === "reduce" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     requestAnimationFrame(() => {
       if (!grid.isConnected) return;

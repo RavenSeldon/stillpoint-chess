@@ -27,6 +27,7 @@ import {
 import { PRACTICE_RECOVERY_KEY, parsePracticeRecovery } from "../core/storage/recovery.js";
 import { freshSrs, due, review } from "../core/srs/scheduler.js";
 import { buildLearningProfile, type Recommendation } from "../core/learning/engine.js";
+import { explainMove } from "../core/learning/explanations.js";
 import {
   openings,
   masters,
@@ -135,6 +136,7 @@ export class App {
   private online = navigator.onLine;
   private lastArrow: { uci: string; color: "green" | "red" } | null = null;
   private coachMessage = "";
+  private coachLesson = "";
   private status = "Ready for a new game";
   private gameResult: string | null = null;
   private selectedTime = "zen";
@@ -150,6 +152,8 @@ export class App {
   private openingCorrect = 0;
   private openingErrors = 0;
   private openingRecorded = false;
+  private openingFeedback = "";
+  private openingLastSan = "";
   private gym: "coordinates" | "color" | "knight" | "calculation" =
     "coordinates";
   private sprintRemaining = 60;
@@ -173,6 +177,7 @@ export class App {
   private endgameId = endgames[0].id;
   private blunderId = "example-0";
   private blunderFeedback = "";
+  private blunderShowLesson = false;
   private masterId = masters[0].id;
   private masterIndex = 0;
   private masterMode: "study" | "guess" = "study";
@@ -374,7 +379,7 @@ export class App {
     if (navigation && activeTab && navigation.scrollWidth > navigation.clientWidth) {
       navigation.scrollTo({
         left: activeTab.offsetLeft - (navigation.clientWidth - activeTab.offsetWidth) / 2,
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        behavior: this.state.settings.reduceMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
       });
     }
     if (view === "play") {
@@ -406,19 +411,90 @@ export class App {
   private panel(title: string, inner: string, overline = "SESSION") {
     return `<div class="panel"><span class="overline">${overline}</span><h2>${title}</h2>${inner}</div>`;
   }
+  private moveLesson(before: string, move: string, purpose = "") {
+    if (!this.state.settings.guidance) return "";
+    try {
+      const zh = this.state.settings.language === "zh";
+      const lesson = explainMove(before, move, this.state.settings.language);
+      return `<section class="move-lesson" aria-label="${zh ? "着法讲解" : "Move explanation"}"><span class="overline">${zh ? "读懂这一步" : "READ THIS MOVE"}</span><p class="move-reading">${esc(lesson.reading)}</p>${purpose ? `<p class="move-purpose"><b>${zh ? "为什么这步出现在这里：" : "Why this move appears here:"}</b> ${esc(purpose)}</p>` : ""}<ul>${lesson.reasons.map((reason) => `<li>${esc(reason)}</li>`).join("")}</ul></section>`;
+    } catch {
+      return "";
+    }
+  }
+  private latestMoveLesson() {
+    if (!this.state.settings.guidance) return "";
+    const zh = this.state.settings.language === "zh";
+    const last = this.game.history.at(-1);
+    const lastPlayer = [...this.game.history].reverse().find((move) => move.before.split(" ")[1] === this.player);
+    const playerLesson = lastPlayer
+      ? `<h3>${zh ? "你的上一手" : "Your last move"}</h3>${this.moveLesson(lastPlayer.before, lastPlayer.uci)}`
+      : "";
+    const opponentLesson = last && last !== lastPlayer
+      ? `<h3>${zh ? "对手的上一手" : "Opponent’s last move"}</h3>${this.moveLesson(last.before, last.uci)}`
+      : "";
+    return playerLesson + opponentLesson;
+  }
+  private beginnerGuide() {
+    if (!this.state.settings.guidance || this.game.history.length || this.player !== "w") return "";
+    const zh = this.state.settings.language === "zh";
+    const language = `<div class="field-row guide-language"><label for="guide-language">Language / 教学语言</label><select id="guide-language"><option value="en" ${zh ? "" : "selected"}>English</option><option value="zh" ${zh ? "selected" : ""}>简体中文</option></select></div>`;
+    if (zh) return `<section class="beginner-guide" aria-labelledby="beginner-guide-title"><div class="guide-topline"><span class="overline">从这里开始 · 无需基础</span><button type="button" class="guide-close" data-guidance-off aria-label="隐藏新手引导">×</button></div>${language}<h2 id="beginner-guide-title">走出第一步，就已经开始了</h2><p><b>目标是将杀：</b>攻击对方的王，让它没有任何合法方式解除将军。棋子规则中并不会真的吃掉王。</p><ol class="beginner-steps"><li><b>白方先行。</b>这一局你执白。</li><li><b>点选一个白棋。</b>小圆点表示合法落点；圆环表示可以吃子。</li><li><b>试试 e2 → e4。</b>这个兵占据中心格，也为象打开斜线。你也可以直接输入 <b>e4</b>。</li></ol><div class="button-row">${btn("beginner-e4", "试试 1. e4", "primary")}<button type="button" class="btn" data-guidance-off>隐藏引导</button></div><p class="helper">引导完全可选。随时可以在“数据与隐私”中重新开启。</p></section>`;
+    return `<section class="beginner-guide" aria-labelledby="beginner-guide-title"><div class="guide-topline"><span class="overline">START HERE · NO EXPERIENCE NEEDED</span><button type="button" class="guide-close" data-guidance-off aria-label="Hide beginner guidance">×</button></div>${language}<h2 id="beginner-guide-title">Your first move is enough</h2><p><b>The goal is checkmate:</b> attack the opposing king so it has no legal escape. You never actually capture the king.</p><ol class="beginner-steps"><li><b>White moves first.</b> You are White in this game.</li><li><b>Tap a white piece.</b> Small dots show where it can legally move; rings show captures.</li><li><b>Try e2 → e4.</b> This pawn takes a central square and opens a diagonal for your bishop. You can also type <b>e4</b>.</li></ol><div class="button-row">${btn("beginner-e4", "Try 1. e4", "primary")}<button type="button" class="btn" data-guidance-off>Hide guidance</button></div><p class="helper">Guidance is optional. Turn it back on any time in Data & Privacy.</p></section>`;
+  }
+  private openingLesson(index: number, san = this.currentOpening().moves[index]) {
+    const line = this.currentOpening();
+    if (index < 0 || index >= line.moves.length) return "";
+    const game = new Chess();
+    for (let i = 0; i < index; i++) game.move(line.moves[i]);
+    const purpose = san === line.moves[index]
+      ? line.explanations[index]
+      : `${line.idea} This accepted alternative uses the same opening’s broader plan.`;
+    return this.moveLesson(game.fen(), san, purpose);
+  }
+  private blunderLesson(blunder: Blunder) {
+    const zh = this.state.settings.language === "zh";
+    if (zh && blunder.starter) {
+      const lessons: Record<string, string> = {
+        "example-0": "后沿斜线到 h4 将军，直指 e1 的王。白方过早推进 f 兵和 g 兵，暴露了王；此时没有任何合法着法能解除将军。",
+        "example-1": "后吃掉 f7 兵并将军，c4 象同时保护后。黑王无法解除这次攻击。要点是识别棋子协同，而不是以为早出后永远都好。",
+        "example-2": "车到 e8 将军。黑王被自己的 f7、g7、h7 兵困住，无法逃出底线。",
+      };
+      if (lessons[blunder.id]) return lessons[blunder.id];
+    }
+    if (!zh && blunder.lesson) return blunder.lesson;
+    try {
+      return explainMove(blunder.fen, blunder.best, this.state.settings.language).reasons.join(" ");
+    } catch {
+      return zh
+        ? "寻找让这步棋有效的具体将军、吃子或威胁。"
+        : "Look for the concrete check, capture, or threat that makes this continuation effective.";
+    }
+  }
   private applyTheme() {
-    document.body.dataset.theme = this.state.settings.theme;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColors[this.state.settings.theme]);
+    const settings = this.state.settings;
+    document.body.dataset.theme = settings.theme;
+    document.body.dataset.textSize = settings.largeText ? "large" : "standard";
+    document.body.dataset.motion = settings.reduceMotion ? "reduce" : "system";
+    document.documentElement.lang = settings.language === "zh" ? "zh-CN" : "en";
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColors[settings.theme]);
   }
   private render() {
     this.applyTheme();
     const active = nav.find((n) => n[0] === this.view);
-    this.root.innerHTML = `<div class="app-shell"><aside class="navigation"><div class="brand"><div class="brand-symbol">♔</div><div><div class="brand-title">STILLPOINT</div><div class="brand-subtitle">A CHESS PRACTICE</div></div></div><div class="nav-caption">YOUR PRACTICE</div><nav aria-label="Main navigation">${nav.map(([id, label, glyph]) => `<button class="nav-link ${id === this.view ? "active" : ""}" data-view="${id}" type="button" ${id === this.view ? 'aria-current="page"' : ""}><span class="nav-glyph">${glyph}</span>${label}</button>`).join("")}</nav><div class="nav-bottom"><div class="practice-line">道 · 愛 · 不二</div><small>Truth on the board.<br>Progress stays on this device.</small></div></aside><main id="main-content" class="main-content">${this.renderMain()}</main><div id="live" class="sr-only" aria-live="polite" aria-atomic="true">${esc(this.announcements)}</div></div>`;
+    this.root.innerHTML = `<div class="app-shell"><aside class="navigation"><div class="brand"><div class="brand-symbol">♔</div><div><div class="brand-title">STILLPOINT</div><div class="brand-subtitle">A CHESS PRACTICE</div></div></div><div class="nav-caption">YOUR PRACTICE</div><nav aria-label="Main navigation">${nav.map(([id, label, glyph]) => `<button class="nav-link ${id === this.view ? "active" : ""}" data-view="${id}" type="button" ${id === this.view ? 'aria-current="page"' : ""}><span class="nav-glyph" aria-hidden="true">${glyph}</span>${label}</button>`).join("")}</nav><div class="nav-bottom"><div class="practice-line">道 · 愛 · 不二</div><small>Truth on the board.<br>Progress stays on this device.</small></div></aside><main id="main-content" class="main-content" tabindex="-1">${this.renderMain()}</main><div id="live" class="sr-only" aria-live="polite" aria-atomic="true">${esc(this.announcements)}</div></div>`;
     document
       .querySelectorAll<HTMLButtonElement>("[data-view]")
       .forEach((b) =>
         b.addEventListener("click", () => this.switchView(b.dataset.view!)),
       );
+    document.querySelectorAll<HTMLButtonElement>("[data-guidance-off]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.state.settings.guidance = false;
+        this.saveSoon();
+        this.announce("Beginner guidance hidden. Re-enable it in Data & Privacy.");
+        this.render();
+      });
+    });
     switch (this.view) {
       case "path":
         this.wirePath();
@@ -525,6 +601,8 @@ export class App {
       this.openingCorrect = 0;
       this.openingErrors = 0;
       this.openingRecorded = false;
+      this.openingFeedback = "";
+      this.openingLastSan = "";
     } else if (recommendation.area === "visualization" || recommendation.area === "calculation") {
       if (recommendation.mode && ["coordinates", "color", "knight", "calculation"].includes(recommendation.mode)) this.gym = recommendation.mode as typeof this.gym;
       this.stopGymInterval();
@@ -587,9 +665,9 @@ export class App {
      )
      .join("")}</select></div>
    <label class="check-line"><input id="coach-toggle" type="checkbox" ${this.coach ? "checked" : ""}> Live coach · experimental search evaluation</label>`;
-    const side = this.panel(
+    const side = this.beginnerGuide() + this.panel(
       "Your table",
-      `${settings}<div class="button-row">${btn("new-game", "New game", "primary")}${btn("flip-board", "Flip board")}</div><div class="button-row">${this.selectedTime === "zen" ? btn("takeback", "Takeback") : ""}${btn("resign", "Resign")}${btn("claim-draw", "Claim draw")}</div><div class="button-row">${this.boardBlind === "blindfold" ? btn("peek", "Peek for 3s") : ""}${btn("export-pgn", "Export PGN")}</div><div class="section-rule"></div><label for="move-input" class="overline">MOVE INPUT</label><form id="move-form" class="inline-form"><input id="move-input" aria-label="Enter move in algebraic notation" placeholder="e4, Nf3, e2e4…" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="send"><button type="submit" class="btn primary">Play</button></form><p class="helper">Tap two squares, drag a piece, or enter SAN/UCI.</p><details class="setup-details"><summary>Load custom FEN or PGN</summary><textarea id="setup-text" rows="3" aria-label="Custom FEN or PGN" placeholder="Paste a valid FEN or PGN here"></textarea>${btn("load-setup", "Load position")}</details><div class="section-rule"></div><h3>Coach’s observation</h3><p class="coach-box">${esc(this.coachMessage || "After your move, local Stockfish compares the preferred continuation with the resulting position. Evaluations are estimates, not explanations of human intent.")}</p><div class="section-rule"></div><h3>Move record</h3><div class="move-history">${moveList || '<span class="muted">The first move is yours.</span>'}</div>${result ? `<p class="result-line">Game ended: ${result}</p>` : ""}${this.reviewHtml()}`,
+      `${settings}<div class="button-row">${btn("new-game", "New game", "primary")}${btn("flip-board", "Flip board")}</div><div class="button-row">${this.selectedTime === "zen" ? btn("takeback", "Takeback") : ""}${btn("resign", "Resign")}${btn("claim-draw", "Claim draw")}</div><div class="button-row">${this.boardBlind === "blindfold" ? btn("peek", "Peek for 3s") : ""}${btn("export-pgn", "Export PGN")}</div><div class="section-rule"></div><label for="move-input" class="overline">MOVE INPUT</label><form id="move-form" class="inline-form"><input id="move-input" aria-label="Enter move in algebraic notation" placeholder="e4, Nf3, e2e4…" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="send"><button type="submit" class="btn primary">Play</button></form><p class="helper">Tap two squares, drag a piece, or enter SAN/UCI.</p><details class="setup-details"><summary>Load custom FEN or PGN</summary><textarea id="setup-text" rows="3" aria-label="Custom FEN or PGN" placeholder="Paste a valid FEN or PGN here"></textarea>${btn("load-setup", "Load position")}</details><div class="section-rule"></div><h3>Coach’s observation</h3><p class="coach-box">${esc(this.coachMessage || "After your move, local Stockfish compares the preferred continuation with the resulting position. Evaluations are estimates, not explanations of human intent.")}</p>${this.state.settings.guidance && this.coachLesson ? `<p class="coach-preferred"><b>Preferred move, in plain language:</b> ${esc(this.coachLesson)}</p>` : ""}${this.latestMoveLesson()}<div class="section-rule"></div><h3>Move record</h3><div class="move-history">${moveList || '<span class="muted">The first move is yours.</span>'}</div>${result ? `<p class="result-line">Game ended: ${result}</p>` : ""}${this.reviewHtml()}`,
       "PRACTICE AGAINST THE ENGINE",
     );
     return this.layout(
@@ -613,6 +691,7 @@ export class App {
     this.gameResult = null;
     this.gameSaved = false;
     this.coachMessage = "";
+    this.coachLesson = "";
     this.reviews = [];
     this.lastArrow = null;
     this.status = "New game. Your move.";
@@ -690,6 +769,7 @@ export class App {
       return;
     }
     this.lastArrow = null;
+    this.coachLesson = "";
     this.status = `You played ${rec.san}`;
     if (this.selectedTime !== "zen")
       this.clocks[side === "w" ? 0 : 1] += this.increment;
@@ -718,6 +798,13 @@ export class App {
           whiteCp: played.scoreCp,
         });
         this.coachMessage = `${grade} · estimated −${loss.toFixed(1)} percentage points · ${moveAccuracy(loss).toFixed(0)}% estimated move accuracy. Preferred ${best.san || "none"} (${scoreText(best.score, side)}); after ${rec.san}: ${scoreText(played.score, side)}.`;
+        if (best.san) {
+          const language = this.state.settings.language;
+          const preferred = explainMove(before, best.san, language);
+          this.coachLesson = `${preferred.reading} ${preferred.reasons.join(" ")} ${language === "zh"
+            ? "Stockfish 在当前搜索深度下更偏好这一步；这只是供你检验的搜索证据，不代表它知道人类棋手的意图。"
+            : "Stockfish preferred it at this search depth; that is evidence to inspect, not a claim about human intent."}`;
+        }
         if (best.bestMove && best.bestMove !== rec.uci) {
           this.lastArrow = { uci: best.bestMove, color: "green" };
           if (grade === "Blunder" && !this.state.blunders.some(item => item.fen === before && !item.starter)) {
@@ -730,6 +817,7 @@ export class App {
               solved: 0,
               starter: false,
               title: "Your game · " + new Date().toLocaleDateString(),
+              lesson: explainMove(before, bestMove).reasons.join(" "),
               timestamp: Date.now(),
             });
             this.state.blunders = this.state.blunders.slice(0, 500);
@@ -798,6 +886,13 @@ export class App {
       !this.thinking && !this.gameResult && this.game.turn === this.player,
       { onMove: (uci: string) => this.makePlayMove(uci) },
     );
+    this.bind("beginner-e4", () => this.makePlayMove("e4"));
+    this.onChange("guide-language", (value) => {
+      if (!["en", "zh"].includes(value)) return;
+      this.state.settings.language = value as "en" | "zh";
+      this.saveSoon();
+      this.render();
+    });
     this.onChange("side-choice", (s) => {
       this.player =
         s === "random" ? (Math.random() < 0.5 ? "w" : "b") : (s as Color);
@@ -889,6 +984,7 @@ export class App {
         this.selectedTime = "zen";
         this.status = "Custom position imported";
         this.coachMessage = "";
+        this.coachLesson = "";
         this.render();
         this.savePracticeRecovery();
         if (this.game.turn !== this.player && !this.gameResult)
@@ -934,6 +1030,7 @@ export class App {
         this.reviews = [];
         this.lastArrow = null;
         this.coachMessage = "Practice from the critical position. The original game remains in your saved history.";
+        this.coachLesson = "";
         this.status = "Find a stronger continuation";
         this.render();
         this.savePracticeRecovery();
@@ -958,10 +1055,13 @@ export class App {
     const modes = `<div class="segment">${btn("walk-mode", "Walkthrough", this.openingMode === "walk" ? "current" : "")}${btn("drill-mode", "Recall drill", this.openingMode === "drill" ? "current" : "")}</div>`;
     const next = line.moves[this.openingIndex];
     const isPlayersTurn = g.turn === line.side;
+    const lesson = this.openingIndex
+      ? this.openingLesson(this.openingIndex - 1, this.openingLastSan || undefined)
+      : "";
     const card =
       this.openingMode === "walk"
-        ? `<div class="opening-note"><b>Strategic idea</b><p>${esc(line.idea)}</p><b>Common mistake</b><p>${esc(line.trap)}</p></div><div class="button-row">${btn("opening-prev", "← Previous")}${btn("opening-next", "Next →", "primary")}</div><p class="helper">${this.openingIndex}/${line.moves.length} plies · ${next ? `Next: ${esc(next)}` : "Line complete"}</p>`
-        : `<div class="coach-box">${this.openingIndex >= line.moves.length ? "Drill complete." : isPlayersTurn ? "Find your repertoire move on the board. Multiple authored alternatives can be accepted." : "Opponent reply incoming…"}</div><div class="button-row">${btn("opening-restart", "Restart drill")}${btn("opening-hint", "Reveal next move")}</div><form id="opening-move-form" class="inline-form"><input id="opening-move" aria-label="Enter opening move" placeholder="SAN or UCI" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="send"><button class="btn primary" type="submit">Play</button></form><p class="helper">Correct moves ${this.openingCorrect} · retries ${this.openingErrors}</p>`;
+        ? `<div class="opening-note"><b>Strategic idea</b><p>${esc(line.idea)}</p><b>Common mistake</b><p>${esc(line.trap)}</p></div><div class="button-row">${btn("opening-prev", "← Previous")}${btn("opening-next", "Next →", "primary")}</div><p class="helper">${this.openingIndex}/${line.moves.length} plies · ${next ? `Next: ${esc(next)}` : "Line complete"}</p>${lesson}`
+        : `<div class="coach-box">${esc(this.openingFeedback || (this.openingIndex >= line.moves.length ? "Drill complete. Review the reasons below, then return later to recall them." : isPlayersTurn ? "Find the repertoire move. A correct answer will show both the move and its purpose." : "Opponent reply incoming…"))}</div><div class="button-row">${btn("opening-restart", "Restart drill")}${btn("opening-hint", "Reveal & explain")}</div><form id="opening-move-form" class="inline-form"><input id="opening-move" aria-label="Enter opening move" placeholder="SAN or UCI" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="send"><button class="btn primary" type="submit">Play</button></form><p class="helper">Correct moves ${this.openingCorrect} · retries ${this.openingErrors}. Legal alternatives are not automatically bad; they are simply outside this memory line.</p>${lesson}`;
     const side = this.panel(
       line.title,
       `${selector}${modes}${card}<div class="section-rule"></div><h3>Memory schedule</h3><div class="progress-track"><div style="width:${stat.masteryPercent}%"></div></div><p class="helper">Mastery ${stat.masteryPercent}% · ${stat.attempts} completed review${stat.attempts === 1 ? "" : "s"} · ${due(stat) ? "Due now" : "Next review " + new Date(stat.nextDueTimestamp).toLocaleDateString()}</p>${btn("reset-opening", "Reset this line")}`,
@@ -996,12 +1096,16 @@ export class App {
       this.openingCorrect = 0;
       this.openingErrors = 0;
       this.openingRecorded = false;
+      this.openingFeedback = "";
+      this.openingLastSan = "";
       this.render();
     });
     this.bind("walk-mode", () => {
       this.openingMode = "walk";
       this.openingIndex = 0;
       this.openingRecorded = false;
+      this.openingFeedback = "";
+      this.openingLastSan = "";
       this.render();
     });
     this.bind("drill-mode", () => {
@@ -1010,15 +1114,21 @@ export class App {
       this.openingCorrect = 0;
       this.openingErrors = 0;
       this.openingRecorded = false;
+      this.openingFeedback = "";
+      this.openingLastSan = "";
       this.render();
       this.autoplayOpening();
     });
     this.bind("opening-next", () => {
       this.openingIndex = Math.min(line.moves.length, this.openingIndex + 1);
+      this.openingFeedback = "";
+      this.openingLastSan = "";
       this.render();
     });
     this.bind("opening-prev", () => {
       this.openingIndex = Math.max(0, this.openingIndex - 1);
+      this.openingFeedback = "";
+      this.openingLastSan = "";
       this.render();
     });
     this.bind("opening-restart", () => {
@@ -1026,12 +1136,20 @@ export class App {
       this.openingCorrect = 0;
       this.openingErrors = 0;
       this.openingRecorded = false;
+      this.openingFeedback = "";
+      this.openingLastSan = "";
       this.render();
       this.autoplayOpening();
     });
     this.bind("opening-hint", () => {
-      if (this.openingIndex < line.moves.length)
-        this.announce("Next repertoire move: " + line.moves[this.openingIndex]);
+      if (this.openingIndex < line.moves.length) {
+        const move = line.moves[this.openingIndex];
+        this.openingFeedback = this.state.settings.guidance
+          ? `Try ${move}. ${line.explanations[this.openingIndex]}`
+          : `Repertoire move: ${move}`;
+        this.announce(this.openingFeedback);
+        this.render();
+      }
     });
     $("opening-move-form")?.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -1063,7 +1181,12 @@ export class App {
         this.openingMode !== "drill"
       )
         return;
+      const played = line.moves[this.openingIndex];
       this.openingIndex++;
+      this.openingLastSan = played;
+      this.openingFeedback = this.state.settings.guidance
+        ? `Opponent played ${played}. ${line.explanations[this.openingIndex - 1]}`
+        : `Opponent played ${played}.`;
       if (this.openingIndex >= line.moves.length) this.completeOpening();
       this.render();
       this.autoplayOpening();
@@ -1094,27 +1217,39 @@ export class App {
     try {
       san = g.move(uci).san;
     } catch {
-      this.announce("Illegal opening move. Try another legal move.");
-      return;
-    }
-    const accepted = [
-      line.moves[this.openingIndex],
-      ...(line.alternatives?.[this.openingIndex] || []),
-    ].some((s) => s.replace(/[+#]$/, "") === san.replace(/[+#]$/, ""));
-    if (!accepted) {
-      this.openingErrors++;
-      this.announce("Not a move in this authored repertoire. Try again.");
+      this.openingFeedback = "That move is not legal here. Select one of your pieces to see its legal destinations, then try again.";
+      this.announce(this.openingFeedback);
       this.render();
       return;
     }
+    const playedIndex = this.openingIndex;
+    const accepted = [
+      line.moves[playedIndex],
+      ...(line.alternatives?.[playedIndex] || []),
+    ].some((s) => s.replace(/[+#]$/, "") === san.replace(/[+#]$/, ""));
+    if (!accepted) {
+      this.openingErrors++;
+      this.openingFeedback = `${san} is legal, but it is outside this authored memory line. That does not make it a bad move. Try again, or choose Reveal & explain.`;
+      this.announce(this.openingFeedback);
+      this.render();
+      return;
+    }
+    const isMainMove = san.replace(/[+#]$/, "") === line.moves[playedIndex].replace(/[+#]$/, "");
+    const purpose = isMainMove
+      ? line.explanations[playedIndex]
+      : `This accepted alternative follows the line’s broader plan: ${line.idea}`;
     this.openingCorrect++;
+    this.openingLastSan = san;
+    this.openingFeedback = this.state.settings.guidance
+      ? `Correct: ${san}. ${purpose}`
+      : `Correct: ${san}.`;
     this.openingIndex++;
     if (
       this.openingIndex === line.moves.length ||
-      line.alternatives?.[this.openingIndex - 1]?.includes(san)
+      line.alternatives?.[playedIndex]?.includes(san)
     ) {
       this.completeOpening();
-    } else this.announce("Correct move: " + san);
+    } else this.announce(this.openingFeedback);
     this.render();
     this.autoplayOpening();
   }
@@ -1365,10 +1500,10 @@ export class App {
           ).san;
           if (got.replace(/[+#]$/, "") === expected.replace(/[+#]$/, "")) {
             correct = true;
-            this.calculationFeedback = "Correct continuation: " + expected;
+            this.calculationFeedback = `Correct continuation: ${expected}.${this.state.settings.guidance ? " " + c.explanation : ""}`;
             this.state.stats.calcSolved++;
           } else
-            this.calculationFeedback = `That is legal, but the authored continuation is ${expected}. This is opening recall, not a proved winning tactic.`;
+            this.calculationFeedback = `${got} is legal, but the authored continuation is ${expected}. This is opening recall, not a proved winning tactic.${this.state.settings.guidance ? " " + c.explanation : ""}`;
         } catch {
           this.calculationFeedback =
             "That move is not legal in the imagined position. Recalculate the sequence.";
@@ -1413,7 +1548,7 @@ export class App {
     );
     const side = this.panel(
       e.title,
-      `<div class="field-row"><label for="endgame-select">Training position</label><select id="endgame-select">${endgames.map((p) => `<option value="${p.id}" ${p.id === e.id ? "selected" : ""}>${esc(p.title)}</option>`).join("")}</select></div><h3>Objective</h3><p>${esc(e.goal)}</p><h3>Key idea</h3><p>${esc(e.lesson)}</p><div class="button-row">${btn("start-endgame", "Start drill", "primary")}${inGame ? btn("reset-endgame", "Reset") : ""}</div>${inGame ? `<div class="section-rule"></div><form id="endgame-move-form" class="inline-form"><input id="endgame-move" aria-label="Enter endgame move" placeholder="e.g. Rd1+"><button class="btn primary" type="submit">Play</button></form><p class="helper">${this.gameResult ? "Result " + this.gameResult : "Your objective is judged by the actual legal game result or promotion—not by shallow centipawns."}</p>` : ""}`,
+      `<div class="field-row"><label for="endgame-select">Training position</label><select id="endgame-select">${endgames.map((p) => `<option value="${p.id}" ${p.id === e.id ? "selected" : ""}>${esc(p.title)}</option>`).join("")}</select></div><h3>Objective</h3><p>${esc(e.goal)}</p><h3>Key idea</h3><p>${esc(e.lesson)}</p><div class="button-row">${btn("start-endgame", "Start drill", "primary")}${inGame ? btn("reset-endgame", "Reset") : ""}</div>${inGame ? `<div class="section-rule"></div><form id="endgame-move-form" class="inline-form"><input id="endgame-move" aria-label="Enter endgame move" placeholder="e.g. Rd1+"><button class="btn primary" type="submit">Play</button></form><p class="helper">${this.gameResult ? "Result " + this.gameResult : "Your objective is judged by the actual legal game result or promotion—not by shallow centipawns."}</p>${this.latestMoveLesson()}` : ""}`,
       "ENDGAME FUNDAMENTALS",
     );
     return this.layout(
@@ -1493,7 +1628,7 @@ export class App {
       .join("");
     const side = this.panel(
       "Repair the pattern",
-      `<p>You missed a stronger continuation here. Find the move.</p><p class="coach-box">In the example, the move was <b>${esc(b.bad)}</b>. What tactical resource was overlooked?</p><form id="blunder-move-form" class="inline-form"><input id="blunder-move" aria-label="Answer the blunder puzzle" placeholder="Best move, SAN or UCI"><button class="btn primary" type="submit">Check</button></form><p class="helper">${esc(this.blunderFeedback || "Think before moving. The board also accepts a tap or drag.")}</p><div class="button-row">${btn("blunder-hint", "Reveal answer")}${btn("blunder-delete", "Delete record")}</div><div class="section-rule"></div><h3>Review queue · ${this.state.blunders.length}</h3><div class="bank-list">${list}</div>`,
+      `<p>${b.starter ? "This is a practice pattern, not one of your mistakes. Find checkmate in one move." : "This position came from your game. Look for a stronger continuation, without rushing."}</p><p class="coach-box">${b.starter ? "In the played example" : "In your game"}, the move was <b>${esc(b.bad)}</b>. Look for checks, captures, and immediate threats. You can reveal the answer and its lesson whenever you are ready.</p><form id="blunder-move-form" class="inline-form"><input id="blunder-move" aria-label="Answer the blunder puzzle" placeholder="Best move, SAN or UCI"><button class="btn primary" type="submit">Check</button></form><p class="helper">${esc(this.blunderFeedback || "Think before moving. The board also accepts a tap or drag.")}</p>${this.blunderShowLesson ? this.moveLesson(b.fen, b.best, this.blunderLesson(b)) : ""}<div class="button-row">${btn("blunder-hint", "Reveal & explain")}${btn("blunder-delete", "Delete record")}</div><div class="section-rule"></div><h3>Review queue · ${this.state.blunders.length}</h3><div class="bank-list">${list}</div>`,
       "PATTERNS, NOT PUNISHMENT",
     );
     return this.layout(
@@ -1518,18 +1653,21 @@ export class App {
     const solve = (attempt: string) => {
       const test = new Chess(b.fen);
       let correct = false;
+      this.blunderShowLesson = false;
       try {
         const got = test.move(attempt);
         if (got.san.replace(/[+#]$/, "") === b.best.replace(/[+#]$/, "")) {
           correct = true;
+          this.blunderShowLesson = true;
           b.solved++;
-          this.blunderFeedback =
-            "Correct: " + b.best + ". You found the tactical resource.";
+          this.blunderFeedback = "Correct: " + b.best + "." + (this.state.settings.guidance
+            ? " The lesson below explains the concrete resource."
+            : "");
         } else
           this.blunderFeedback =
-            "Legal, but not the authored solution. Reconsider the forcing moves.";
+            `${got.san} is legal, but it misses this puzzle’s tactical point. Reconsider checks, captures, and immediate threats.`;
       } catch {
-        this.blunderFeedback = "That move is illegal in this position.";
+        this.blunderFeedback = "That move is illegal in this position. Try a move shown by selecting one of your pieces.";
       }
       this.recordLearning("tactics", correct, b.id);
       this.announce(this.blunderFeedback);
@@ -1541,7 +1679,8 @@ export class App {
       solve(($("blunder-move") as HTMLInputElement).value);
     });
     this.bind("blunder-hint", () => {
-      this.blunderFeedback = "One answer is " + b.best;
+      this.blunderShowLesson = true;
+      this.blunderFeedback = `The move is ${b.best}.${this.state.settings.guidance ? " Read the idea below, then try it from this position later." : ""}`;
       this.render();
     });
     this.bind("blunder-delete", () => {
@@ -1549,6 +1688,7 @@ export class App {
       this.state.blunders = this.state.blunders.filter((p) => p.id !== b.id);
       this.blunderId = this.state.blunders[0]?.id || "";
       this.blunderFeedback = "";
+      this.blunderShowLesson = false;
       this.saveSoon();
       this.render();
     });
@@ -1556,6 +1696,7 @@ export class App {
       n.addEventListener("click", () => {
         this.blunderId = (n as HTMLElement).dataset.blunder!;
         this.blunderFeedback = "";
+        this.blunderShowLesson = false;
         this.render();
       }),
     );
@@ -1678,7 +1819,7 @@ export class App {
     const panel = this.panel(
       "Your data stays here",
       `${summary}<p>No game, position, or learning signal is sent to an analysis service. Current results are stored in this browser’s IndexedDB; a temporary practice snapshot is kept in local storage for 10 minutes. Clearing browser storage or uninstalling may remove them; export a backup first.</p>
-   <div class="button-row">${btn("export-backup", "Export JSON backup", "primary")}<label for="import-backup" class="btn">Import backup</label><input id="import-backup" class="sr-only" type="file" accept="application/json,.json"></div><p class="helper">Imports are validated before they replace or merge with current data.</p><div class="section-rule"></div><div class="field-row"><label for="theme-select">Colour theme</label><select id="theme-select">${themeOptions}</select></div><label class="check-line"><input id="setting-coords" type="checkbox" ${s.settings.coords ? "checked" : ""}> Show board coordinates</label><div class="section-rule"></div>${btn("clear-data", "Clear all local progress", "danger")}<div class="section-rule"></div><h3>Install & offline</h3><p class="status-message"><span class="status-dot"></span> ${this.online ? "Online" : "Offline"} · ${this.offlineReady ? "Offline assets ready" : "Preparing offline assets"}</p>${install}<p class="helper">The app shell, training content, chess.js, and Stockfish WASM are cached together after a successful first online visit. Keep this version cached before going offline.</p>`,
+   <div class="button-row">${btn("export-backup", "Export JSON backup", "primary")}<label for="import-backup" class="btn">Import backup</label><input id="import-backup" class="sr-only" type="file" accept="application/json,.json"></div><p class="helper">Imports are validated before they replace or merge with current data.</p><div class="section-rule"></div><div class="field-row"><label for="theme-select">Colour theme</label><select id="theme-select">${themeOptions}</select></div><div class="field-row"><label for="language-select">Lesson language / 教学语言</label><select id="language-select"><option value="en" ${s.settings.language === "en" ? "selected" : ""}>English</option><option value="zh" ${s.settings.language === "zh" ? "selected" : ""}>简体中文</option></select></div><p class="helper">Chinese currently covers the first-game guide, generated move lessons, and starter Blunder Bank lessons. Authored opening notes, master commentary, and the wider interface remain English.</p><label class="check-line"><input id="setting-coords" type="checkbox" ${s.settings.coords ? "checked" : ""}> Show board coordinates</label><label class="check-line"><input id="setting-guidance" type="checkbox" ${s.settings.guidance ? "checked" : ""}> Beginner guidance and plain-language move lessons</label><p class="helper">Turn guidance off to hide onboarding and extended explanations. Core controls, answers, engine reviews, and progress remain available.</p><label class="check-line"><input id="setting-large-text" type="checkbox" ${s.settings.largeText ? "checked" : ""}> Larger interface text</label><label class="check-line"><input id="setting-reduce-motion" type="checkbox" ${s.settings.reduceMotion ? "checked" : ""}> Reduce animations and smooth scrolling</label><div class="section-rule"></div>${btn("clear-data", "Clear all local progress", "danger")}<div class="section-rule"></div><h3>Install & offline</h3><p class="status-message"><span class="status-dot"></span> ${this.online ? "Online" : "Offline"} · ${this.offlineReady ? "Offline assets ready" : "Preparing offline assets"}</p>${install}<p class="helper">The app shell, training content, chess.js, and Stockfish WASM are cached together after a successful first online visit. Keep this version cached before going offline.</p>`,
       "PRIVACY BY DESIGN",
     );
     return `<div class="workspace-heading"><div><span class="overline">08 / DATA & PRIVACY</span><h1>Your Space</h1><p>Ownership includes the ability to leave with your records.</p></div></div><div class="settings-layout">${panel}<div class="panel"><span class="overline">IMPLEMENTATION STATUS</span><h2>Built to tell the truth</h2><p>This release uses mature chess rules and real local Stockfish analysis. Its learning path is explainable and evidence-bounded, not a claim of calibrated chess measurement.</p><div class="feature-status"><b>Included</b><p>Adaptive practice recommendations, timestamped learning history, six Stockfish tiers, live coaching, review turning points, opening SRS, four visual exercises, classical games, endgames, Blunder Bank, backup/restore, four colour themes, and a complete offline asset cache.</p><b>Still bounded</b><p>Opening coverage is a starter repertoire; calculation sequences train opening recall rather than certified tactics; endgames use objective-based practice without tablebase claims; reviews analyze your moves rather than every engine reply.</p></div></div></div>`;
@@ -1751,11 +1892,33 @@ export class App {
       this.saveSoon();
       this.applyTheme();
     });
+    this.onChange("language-select", (value) => {
+      if (!["en", "zh"].includes(value)) return;
+      this.state.settings.language = value as "en" | "zh";
+      this.saveSoon();
+      this.render();
+    });
+    for (const [id, key] of [["setting-large-text", "largeText"], ["setting-reduce-motion", "reduceMotion"]] as const) {
+      const control = $(id) as HTMLInputElement | null;
+      if (control) control.onchange = () => {
+        this.state.settings[key] = control.checked;
+        this.saveSoon();
+        this.applyTheme();
+      };
+    }
     const cb = $("setting-coords") as HTMLInputElement | null;
     if (cb)
       cb.onchange = () => {
         this.state.settings.coords = cb.checked;
         this.saveSoon();
+        this.render();
+      };
+    const guidance = $("setting-guidance") as HTMLInputElement | null;
+    if (guidance)
+      guidance.onchange = () => {
+        this.state.settings.guidance = guidance.checked;
+        this.saveSoon();
+        this.announce(guidance.checked ? "Beginner guidance enabled" : "Beginner guidance hidden");
         this.render();
       };
     this.bind("clear-data", async () => {

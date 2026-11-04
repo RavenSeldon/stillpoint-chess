@@ -1,12 +1,73 @@
 import {Chess,INITIAL_FEN} from '../core/chess/Chess.js';
-export type Opening={id:string;title:string;side:'w'|'b';moves:string[];idea:string;trap:string;alternatives?:Record<number,string[]>};
+export type Opening={id:string;title:string;side:'w'|'b';moves:string[];explanations:string[];idea:string;trap:string;alternatives?:Record<number,string[]>};
 export const openings:Opening[]=[
- {id:'italian',title:'Italian Game',side:'w',moves:'e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6 d3'.split(' '),idea:'Develop rapidly, claim central squares, and prepare d4 with c3.',trap:'Early queen adventures lose tempi; watch for ...Nf6 attacks.',alternatives:{8:['O-O']}},
- {id:'ruy',title:'Ruy Lopez',side:'w',moves:'e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 O-O Be7'.split(' '),idea:'Pressure e5 through the c6 defender; castle before launching tactics.',trap:'Do not assume the e5 pawn can simply be won.'},
- {id:'queens',title:"Queen's Gambit",side:'w',moves:'d4 d5 c4 e6 Nc3 Nf6 Bg5 Be7'.split(' '),idea:'Offer the c-pawn to challenge the center; develop before recovering material.',trap:'Greedily holding c4 often costs Black development.'},
- {id:'sicilian',title:'Sicilian Najdorf',side:'b',moves:'e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 a6'.split(' '),idea:'Fight for d4 asymmetrically and prepare a flexible ...a6.',trap:'Premature ...e5 creates weak d5 squares.'},
- {id:'caro',title:'Caro-Kann',side:'b',moves:'e4 c6 d4 d5 Nc3 dxe4 Nxe4 Bf5'.split(' '),idea:'Challenge e4 with a solid pawn base while developing the light bishop.',trap:'Do not trap the bishop behind ...e6 before it develops.'},
- {id:'french',title:'French Advance',side:'b',moves:'e4 e6 d4 d5 e5 c5 c3 Nc6 Nf3 Qb6'.split(' '),idea:'Attack d4 with ...c5, ...Nc6, and ...Qb6; watch b2.',trap:'Do not let White permanently lock your c8 bishop without counterplay.'}
+ {id:'italian',title:'Italian Game',side:'w',moves:'e4 e5 Nf3 Nc6 Bc4 Bc5 c3 Nf6 d3'.split(' '),explanations:[
+  'The pawn occupies the center and opens diagonals for the queen and the f1 bishop.',
+  'Black claims matching central space and opens paths for the queen and f8 bishop.',
+  'The knight develops and attacks e5, asking Black to consider that pawn.',
+  'The knight develops while protecting e5. One move can therefore serve two purposes.',
+  'The bishop develops toward f7, a sensitive square near Black’s king. This creates pressure, not an immediate threat to win a pawn.',
+  'Black develops a bishop toward f2 and waits to see White’s plan.',
+  'This pawn supports a later d4 advance. White is preparing central action rather than forcing it immediately.',
+  'Black develops and attacks e4, creating counterplay instead of only defending.',
+  'This supports e4 and opens a path for the c1 bishop, choosing a solid setup before further central action.'
+ ],idea:'Develop rapidly, claim central squares, and prepare d4 with c3.',trap:'Early queen adventures lose tempi; watch for ...Nf6 attacks.',alternatives:{8:['O-O']}},
+ {id:'ruy',title:'Ruy Lopez',side:'w',moves:'e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 O-O Be7'.split(' '),explanations:[
+  'The pawn occupies the center and opens diagonals for the queen and f1 bishop.',
+  'Black matches White’s central space and opens lines for development.',
+  'The knight develops and attacks e5.',
+  'The knight develops and defends e5.',
+  'The bishop attacks the knight that defends e5. This is pressure on the center; it does not immediately win the pawn.',
+  'Black asks the bishop to choose a square and gains the option to challenge it again with ...b5.',
+  'The bishop keeps pressure on c6 while stepping away from the pawn attack.',
+  'Black develops the knight and attacks e4, giving White something concrete to consider.',
+  'Castling protects the king and connects the rooks before the position becomes more tactical.',
+  'The bishop develops and prepares kingside castling.'
+ ],idea:'Pressure e5 through the c6 defender; castle before launching tactics.',trap:'Do not assume the e5 pawn can simply be won.'},
+ {id:'queens',title:"Queen's Gambit",side:'w',moves:'d4 d5 c4 e6 Nc3 Nf6 Bg5 Be7'.split(' '),explanations:[
+  'The d-pawn takes central space and opens the c1 bishop’s diagonal.',
+  'Black occupies a central square and opens the c8 bishop’s diagonal.',
+  'The c-pawn challenges d5. If Black captures, White can try to use the open center and develop with tempo.',
+  'The e-pawn supports d5 and opens the f8 bishop; the tradeoff is that the c8 bishop remains behind the pawn chain.',
+  'The knight develops and adds pressure to d5.',
+  'The knight develops and defends d5.',
+  'The bishop develops and pins the f6 knight to the queen, indirectly adding pressure to d5.',
+  'The bishop develops, reduces the effect of the pin, and prepares castling.'
+ ],idea:'Offer the c-pawn to challenge the center; develop before recovering material.',trap:'Greedily holding c4 often costs Black development.'},
+ {id:'sicilian',title:'Sicilian Najdorf',side:'b',moves:'e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 a6'.split(' '),explanations:[
+  'White occupies the center and opens two pieces for development.',
+  'Black attacks d4 from the flank instead of copying ...e5, creating an asymmetrical struggle.',
+  'The knight develops and prepares the d4 advance.',
+  'This pawn controls e5 and opens the c8 bishop while keeping a flexible center.',
+  'White challenges the c5 pawn and opens more lines in the center.',
+  'Black exchanges a flank pawn for a central pawn, leaving Black with more pawns in the center files.',
+  'White recaptures and develops a knight onto an active central square.',
+  'The knight develops and attacks e4, provoking White to define the center.',
+  'The knight develops and protects e4.',
+  'This small pawn move keeps White’s pieces away from b5 and can support ...b5 later; it is useful, but not magic or mandatory in every Sicilian.'
+ ],idea:'Fight for d4 asymmetrically and prepare a flexible ...a6.',trap:'Premature ...e5 creates weak d5 squares.'},
+ {id:'caro',title:'Caro-Kann',side:'b',moves:'e4 c6 d4 d5 Nc3 dxe4 Nxe4 Bf5'.split(' '),explanations:[
+  'White occupies the center and opens the queen and f1 bishop.',
+  'Black prepares ...d5 by giving that advance support from the c-pawn.',
+  'White builds a second central pawn and opens the c1 bishop.',
+  'Black challenges e4 immediately rather than letting White keep an uncontested center.',
+  'The knight develops and protects e4.',
+  'Black exchanges into e4, removing White’s central pawn and resolving the immediate tension.',
+  'White recaptures and places the knight centrally; Black can now develop while asking where that knight belongs.',
+  'The bishop develops outside the coming pawn chain, before ...e6 could shut it in.'
+ ],idea:'Challenge e4 with a solid pawn base while developing the light bishop.',trap:'Do not trap the bishop behind ...e6 before it develops.'},
+ {id:'french',title:'French Advance',side:'b',moves:'e4 e6 d4 d5 e5 c5 c3 Nc6 Nf3 Qb6'.split(' '),explanations:[
+  'White takes central space and opens paths for the queen and bishop.',
+  'Black prepares ...d5. The cost is that the c8 bishop is temporarily confined.',
+  'White builds a broad center with a second pawn.',
+  'Black challenges e4 and opens development for the c8 bishop, although the e6 pawn still limits it.',
+  'White gains space and fixes the pawn chain. Black now knows which central structure to attack.',
+  'Black attacks d4, the base of White’s advanced pawn chain, instead of waiting passively.',
+  'White reinforces d4 with another pawn.',
+  'The knight develops and adds direct pressure to d4.',
+  'The knight develops and defends d4.',
+  'The queen moves toward b2 and prepares more pressure on the center. This early queen move has a concrete target, rather than being a general rule.'
+ ],idea:'Attack d4 with ...c5, ...Nc6, and ...Qb6; watch b2.',trap:'Do not let White permanently lock your c8 bishop without counterplay.'}
 ];
 export type MasterGame={id:string;title:string;white:string;black:string;year:number;result:string;score:string;source:string;notes:{ply:number;text:string}[]};
 export const masters:MasterGame[]=[
@@ -24,23 +85,27 @@ export const endgames:Endgame[]=[
  {id:'queenpawn',title:'Queen vs. Advanced Pawn',fen:'8/8/8/5Q2/4K3/8/2p5/k7 w - - 0 1',side:'w',goal:'Stop the pawn without stalemating the king.',lesson:'The pawn one square from promotion can create stalemate resources.'},
  {id:'mate',title:'Queen & King Mate',fen:'7k/8/5K2/8/8/8/8/6Q1 w - - 0 1',side:'w',goal:'Deliver checkmate.',lesson:'Limit the lone king’s space and bring your king closer.'}
 ];
-export type Calculation={id:string;intro:string;sequence:string[];answer:string;sourceLine:string};
+export type Calculation={id:string;intro:string;sequence:string[];answer:string;explanation:string;sourceLine:string};
 export const calculations:Calculation[]=[
- {id:'calc1',intro:'Italian development',sequence:'e4 e5 Nf3 Nc6 Bc4'.split(' '),answer:'Bc5',sourceLine:'italian'},
- {id:'calc2',intro:'Opening tension',sequence:'e4 e5 Nf3 Nc6 Bb5'.split(' '),answer:'a6',sourceLine:'ruy'},
- {id:'calc3',intro:'Queen’s Gambit',sequence:'d4 d5 c4'.split(' '),answer:'e6',sourceLine:'queens'},
- {id:'calc4',intro:'Sicilian structure',sequence:'e4 c5 Nf3 d6 d4'.split(' '),answer:'cxd4',sourceLine:'sicilian'},
- {id:'calc5',intro:'Caro-Kann center',sequence:'e4 c6 d4 d5 Nc3'.split(' '),answer:'dxe4',sourceLine:'caro'},
- {id:'calc6',intro:'French Advance',sequence:'e4 e6 d4 d5 e5'.split(' '),answer:'c5',sourceLine:'french'},
- {id:'calc7',intro:'Italian follow-up',sequence:'Nf3 Nc6 Bc4 Bc5'.split(' '),answer:'c3',sourceLine:'italian'},
- {id:'calc8',intro:'Queen’s Gambit response',sequence:'c4 e6 Nc3 Nf6'.split(' '),answer:'Bg5',sourceLine:'queens'}
+ {id:'calc1',intro:'Italian development',sequence:'e4 e5 Nf3 Nc6 Bc4'.split(' '),answer:'Bc5',explanation:'The bishop develops toward f2 and mirrors White’s active setup.',sourceLine:'italian'},
+ {id:'calc2',intro:'Opening tension',sequence:'e4 e5 Nf3 Nc6 Bb5'.split(' '),answer:'a6',explanation:'The pawn asks the bishop to choose a square and prepares a later ...b5 challenge.',sourceLine:'ruy'},
+ {id:'calc3',intro:'Queen’s Gambit',sequence:'d4 d5 c4'.split(' '),answer:'e6',explanation:'The e-pawn reinforces d5 and opens the f8 bishop’s diagonal.',sourceLine:'queens'},
+ {id:'calc4',intro:'Sicilian structure',sequence:'e4 c5 Nf3 d6 d4'.split(' '),answer:'cxd4',explanation:'Black exchanges a flank pawn for White’s central d-pawn.',sourceLine:'sicilian'},
+ {id:'calc5',intro:'Caro-Kann center',sequence:'e4 c6 d4 d5 Nc3'.split(' '),answer:'dxe4',explanation:'Black removes the e4 pawn and resolves the central tension.',sourceLine:'caro'},
+ {id:'calc6',intro:'French Advance',sequence:'e4 e6 d4 d5 e5'.split(' '),answer:'c5',explanation:'Black attacks d4, the base supporting White’s advanced e5 pawn.',sourceLine:'french'},
+ {id:'calc7',intro:'Italian follow-up',sequence:'Nf3 Nc6 Bc4 Bc5'.split(' '),answer:'c3',explanation:'The c-pawn supports a later d4 advance instead of forcing it unprepared.',sourceLine:'italian'},
+ {id:'calc8',intro:'Queen’s Gambit response',sequence:'c4 e6 Nc3 Nf6'.split(' '),answer:'Bg5',explanation:'The bishop develops and pins the f6 knight to the queen, adding indirect pressure to d5.',sourceLine:'queens'}
 ];
 export function calculationStart(c:Calculation){const g=new Chess();const line=openings.find(o=>o.id===c.sourceLine);if(!line)throw Error('Unknown source line');const start=line.moves.join(' ').indexOf(c.sequence.join(' '));if(start<0)throw Error('Calculation sequence absent');const prefix=line.moves.slice(0,line.moves.join(' ').slice(0,start).trim().split(/\s+/).filter(Boolean).length);for(const s of prefix)g.move(s);return g}
-export function validateContent(){let n=0;for(const o of openings){const g=new Chess();for(let i=0;i<o.moves.length;i++){const before=g.fen();g.move(o.moves[i]);for(const alt of o.alternatives?.[i]||[]){const branch=new Chess(before);branch.move(alt)}}n++}
+export function validateContent(){let n=0;for(const o of openings){if(o.explanations.length!==o.moves.length||o.explanations.some(text=>!text.trim()))throw Error('Every opening move needs an explanation: '+o.id);const g=new Chess();for(let i=0;i<o.moves.length;i++){const before=g.fen();g.move(o.moves[i]);for(const alt of o.alternatives?.[i]||[]){const branch=new Chess(before);branch.move(alt)}}n++}
  for(const m of masters){const g=new Chess().loadPgn(m.score);if(!g.history.length)throw Error('Empty master game');for(const note of m.notes){if(note.ply<0||note.ply>=g.history.length)throw Error('Master note outside game')};n++}
  for(const e of endgames){new Chess(e.fen);n++}
- for(const c of calculations){const g=calculationStart(c);for(const move of c.sequence)g.move(move);g.move(c.answer);n++}return n}
+ for(const c of calculations){if(!c.explanation.trim())throw Error('Calculation needs an explanation: '+c.id);const g=calculationStart(c);for(const move of c.sequence)g.move(move);g.move(c.answer);n++}return n}
 export function starterBlunders(){const a=new Chess().loadPgn('1. f3 e5 2. g4');const b=new Chess().loadPgn('1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6');const c=new Chess('6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1');
- const entries=[{g:a,best:'Qh4#',bad:'Nc6',title:'Fool’s Mate missed'},{g:b,best:'Qxf7#',bad:'Qh3',title:'Scholar’s Mate missed'},{g:c,best:'Re8#',bad:'Re2',title:'Back-rank mate missed'}];
- return entries.map(({g,best,bad,title},i)=>{const test=new Chess(g.fen());const move=test.move(best);if(test.result()!==(g.turn==='w'?'1-0':'0-1'))throw Error('Starter mate is not checkmate: '+best);new Chess(g.fen()).move(bad);return {id:'example-'+i,fen:g.fen(),bad,best:move.san,solved:0,starter:true,title}})
+ const entries=[
+  {g:a,best:'Qh4#',bad:'Nc6',title:'Fool’s Mate missed',lesson:'The queen reaches h4 with check along the diagonal to e1. White’s f- and g-pawn advances have exposed the king, and there is no legal answer to this check.'},
+  {g:b,best:'Qxf7#',bad:'Qh3',title:'Scholar’s Mate missed',lesson:'The queen captures f7 with check while the c4 bishop protects her. Black’s king cannot answer the attack. The lesson is to notice the coordinated attack—not to assume early queen moves are always good.'},
+  {g:c,best:'Re8#',bad:'Re2',title:'Back-rank mate missed',lesson:'The rook moves to e8 with check. Black’s king is trapped by its own f7, g7, and h7 pawns, with no legal escape from the back rank.'}
+ ];
+ return entries.map(({g,best,bad,title,lesson},i)=>{const test=new Chess(g.fen());const move=test.move(best);if(test.result()!==(g.turn==='w'?'1-0':'0-1'))throw Error('Starter mate is not checkmate: '+best);new Chess(g.fen()).move(bad);return {id:'example-'+i,fen:g.fen(),bad,best:move.san,solved:0,starter:true,title,lesson}})
 }

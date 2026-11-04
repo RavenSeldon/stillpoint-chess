@@ -82,3 +82,26 @@ test("four themes and legacy preferences migrate; learning history validates", (
   assert.equal(validateSave(legacy).settings.theme, "paper");
   assert.throws(() => validateSave({ ...freshState(), learning: [{ id: "bad", area: "unknown" }] }));
 });
+
+test("guidance, lesson language, and reading preferences migrate and validate", () => {
+  const legacy = freshState();
+  delete legacy.settings.guidance;
+  delete legacy.settings.language;
+  delete legacy.settings.largeText;
+  delete legacy.settings.reduceMotion;
+  const migrated = validateSave(legacy).settings;
+  assert.equal(migrated.guidance, true);
+  assert.equal(migrated.language, "en");
+  assert.equal(migrated.largeText, false);
+  assert.equal(migrated.reduceMotion, false);
+
+  const customized = freshState();
+  Object.assign(customized.settings, { guidance: false, language: "zh", largeText: true, reduceMotion: true });
+  assert.deepEqual(validateSave(customized).settings, customized.settings);
+  for (const settings of [
+    { guidance: "yes" },
+    { language: "fr" },
+    { largeText: 1 },
+    { reduceMotion: null },
+  ]) assert.throws(() => validateSave({ ...freshState(), settings: { ...freshState().settings, ...settings } }));
+});

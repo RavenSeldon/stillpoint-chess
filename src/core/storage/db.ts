@@ -20,6 +20,7 @@ export type Blunder = {
   solved: number;
   starter: boolean;
   title: string;
+  lesson?: string;
   timestamp?: number;
 };
 export type SavedGame = {
@@ -45,7 +46,15 @@ export type SaveState = {
     calcSolved: number;
     masterSolved: number;
   };
-  settings: { theme: Theme; coords: boolean; sound: boolean };
+  settings: {
+    theme: Theme;
+    coords: boolean;
+    sound: boolean;
+    guidance: boolean;
+    language: "en" | "zh";
+    largeText: boolean;
+    reduceMotion: boolean;
+  };
 };
 
 export function freshState(): SaveState {
@@ -57,7 +66,7 @@ export function freshState(): SaveState {
     srs: {},
     learning: [],
     stats: { coordinateBest: 0, colorCorrect: 0, colorAttempts: 0, knightSolved: 0, calcSolved: 0, masterSolved: 0 },
-    settings: { theme: "indigo", coords: true, sound: false },
+    settings: { theme: "indigo", coords: true, sound: false, guidance: true, language: "en", largeText: false, reduceMotion: false },
   };
 }
 
@@ -99,7 +108,7 @@ export function validateSave(data: unknown): SaveState {
   if (!Array.isArray(x.blunders) || x.blunders.length > 3000) throw Error("Invalid blunders");
   p.blunders = x.blunders.map((raw: unknown) => {
     const b = raw as Blunder;
-    if (!b || typeof b.id !== "string" || typeof b.fen !== "string" || typeof b.best !== "string" || typeof b.bad !== "string" || !Number.isInteger(b.solved) || b.solved < 0 || typeof b.starter !== "boolean" || typeof b.title !== "string") throw Error("Invalid blunder");
+    if (!b || typeof b.id !== "string" || typeof b.fen !== "string" || typeof b.best !== "string" || typeof b.bad !== "string" || !Number.isInteger(b.solved) || b.solved < 0 || typeof b.starter !== "boolean" || typeof b.title !== "string" || (b.lesson !== undefined && (typeof b.lesson !== "string" || b.lesson.length > 1200))) throw Error("Invalid blunder");
     const test = new Chess(b.fen);
     test.move(b.best);
     new Chess(b.fen).move(b.bad);
@@ -124,8 +133,23 @@ export function validateSave(data: unknown): SaveState {
 
   if (!x.settings || typeof x.settings !== "object") throw Error("Missing settings");
   const settings = x.settings as Record<string, unknown>;
-  if (typeof settings.coords !== "boolean" || typeof settings.sound !== "boolean") throw Error("Invalid settings");
-  p.settings = { theme: normalizeTheme(settings.theme), coords: settings.coords, sound: settings.sound };
+  if (
+    typeof settings.coords !== "boolean" ||
+    typeof settings.sound !== "boolean" ||
+    (settings.guidance !== undefined && typeof settings.guidance !== "boolean") ||
+    (settings.language !== undefined && !["en", "zh"].includes(String(settings.language))) ||
+    (settings.largeText !== undefined && typeof settings.largeText !== "boolean") ||
+    (settings.reduceMotion !== undefined && typeof settings.reduceMotion !== "boolean")
+  ) throw Error("Invalid settings");
+  p.settings = {
+    theme: normalizeTheme(settings.theme),
+    coords: settings.coords,
+    sound: settings.sound,
+    guidance: settings.guidance !== false,
+    language: settings.language === "zh" ? "zh" : "en",
+    largeText: settings.largeText === true,
+    reduceMotion: settings.reduceMotion === true,
+  };
   return p;
 }
 

@@ -1205,3 +1205,104 @@ body, .navigation, .panel, .board-mount {
   from { opacity: 0; transform: scale(.72); }
   to { opacity: 1; transform: scale(1); }
 }
+
+/* Optional teaching layer: visible when useful, absent when dismissed. */
+.beginner-guide {
+  position: relative;
+  margin-bottom: 18px;
+  padding: 22px 24px;
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 88%, var(--accent));
+  box-shadow: 0 12px 32px #00000012;
+}
+.guide-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.guide-topline .overline,
+.move-lesson .overline { color: var(--accent); }
+.guide-close {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  margin: -12px -12px -12px 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 25px;
+  line-height: 1;
+}
+.guide-close:hover { background: var(--panel-soft); color: var(--text); }
+.beginner-guide h2 {
+  margin: 8px 0 12px;
+  font-size: 21px;
+  line-height: 1.25;
+  letter-spacing: -.02em;
+}
+.beginner-guide p { color: var(--muted); }
+.beginner-steps {
+  margin: 14px 0;
+  padding-left: 22px;
+  color: var(--muted);
+}
+.beginner-steps li { padding: 4px 0 4px 3px; }
+.beginner-steps b { color: var(--text); }
+.move-lesson {
+  margin: 16px 0;
+  padding: 15px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-soft);
+}
+.move-lesson .move-reading { color: var(--text); font-weight: 600; margin-bottom: 10px; }
+.move-lesson .move-purpose { color: var(--text); }
+.move-lesson ul { margin: 9px 0 0; padding-left: 19px; color: var(--muted); font-size: 12px; }
+.move-lesson li + li { margin-top: 7px; }
+.coach-preferred {
+  margin-top: 12px;
+  padding: 13px 15px;
+  border-radius: 9px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 12px;
+}
+@media (max-width: 700px) {
+  .beginner-guide { padding: 19px; }
+  .beginner-guide .button-row .btn { flex: 1 1 auto; }
+  .move-lesson { padding: 14px; }
+}
+
+/* Lightweight language and reading preferences; all remain local. */
+.skip-link {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+  padding: 10px 15px;
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  transform: translateY(-180%);
+}
+.skip-link:focus { transform: translateY(0); }
+.guide-language { max-width: 290px; margin: 8px 0 16px; }
+body[data-motion="reduce"] *,
+body[data-motion="reduce"] *::before,
+body[data-motion="reduce"] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+body[data-text-size="large"] .main-content { font-size: 17px; }
+body[data-text-size="large"] .workspace-heading p,
+body[data-text-size="large"] .panel p,
+body[data-text-size="large"] .panel li,
+body[data-text-size="large"] .helper,
+body[data-text-size="large"] .coach-preferred,
+body[data-text-size="large"] .move-lesson ul { font-size: inherit; }
+body[data-text-size="large"] .nav-link { font-size: 15px; }
+body[data-text-size="large"] .nav-bottom small { font-size: 14px; }

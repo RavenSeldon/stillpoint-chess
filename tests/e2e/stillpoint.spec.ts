@@ -234,3 +234,128 @@ test("an expired practice snapshot is removed instead of restored", async ({ pag
   await expect(page.locator(".board-note")).not.toContainText("Recovered recent practice");
   expect(await page.evaluate((key) => localStorage.getItem(key), recoveryKey)).toBeNull();
 });
+
+test("first-game guidance plays a real move and preserves both sides' explanations", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Your first move is enough" })).toBeVisible();
+  await page.getByRole("button", { name: "Try 1. e4", exact: true }).click();
+  await expect(page.getByText(/Engine played/).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".move-chip")).toHaveCount(2);
+  await expect(page.locator(".move-lesson").filter({ hasText: "e4: pawn from e2 to e4" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your last move" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Opponent’s last move" })).toBeVisible();
+  await expect(page.locator(".coach-preferred")).toContainText("Stockfish preferred it at this search depth");
+  await expect(page.getByRole("heading", { name: "Your first move is enough" })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test("guidance dismissal persists without disabling play and can be reversed", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Hide guidance", exact: true }).click();
+  await expect(page.locator(".beginner-guide")).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Enter move in algebraic notation" })).toBeEnabled();
+  await page.getByRole("textbox", { name: "Enter move in algebraic notation" }).fill("e4");
+  await page.locator("#move-form button").click();
+  await expect(page.getByText(/Engine played/).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".move-lesson")).toHaveCount(0);
+  await expect(page.locator(".coach-preferred")).toHaveCount(0);
+  await expect(page.locator(".coach-box")).toContainText("Preferred");
+
+  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  await expect(page.locator("#setting-guidance")).not.toBeChecked();
+  await page.reload();
+  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  await expect(page.locator("#setting-guidance")).not.toBeChecked();
+  await page.locator("#setting-guidance").check();
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await page.getByRole("button", { name: "New game", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Your first move is enough" })).toBeVisible();
+});
+
+test("opening recall explains correct moves and revealed repertoire answers", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Opening Dojo" }).click();
+  await page.locator("#drill-mode").click();
+  await page.locator("#opening-move").fill("e4");
+  await page.locator("#opening-move-form button").click();
+  await expect(page.locator(".coach-box")).toContainText("Correct: e4");
+  await expect(page.locator(".move-purpose")).toContainText("opens diagonals for the queen and the f1 bishop");
+  await expect(page.locator(".coach-box")).toContainText("Opponent played e5");
+  await page.getByRole("button", { name: "Reveal & explain" }).click();
+  await expect(page.locator(".coach-box")).toContainText("Try Nf3");
+  await expect(page.locator(".coach-box")).toContainText("attacks e5");
+});
+
+test("starter Blunder Bank is nonjudgmental and reveals a concrete mate lesson", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Blunder Bank" }).click();
+  await expect(page.getByText("This is a practice pattern, not one of your mistakes. Find checkmate in one move.")).toBeVisible();
+  await page.getByRole("button", { name: "Reveal & explain" }).click();
+  await expect(page.locator(".move-reading")).toContainText("Qh4#: queen from d8 to h4");
+  await expect(page.locator(".move-purpose")).toContainText("White’s f- and g-pawn advances have exposed the king");
+  await expect(page.locator(".move-lesson ul")).toContainText("Checkmate:");
+});
+
+test("mobile onboarding and move lessons avoid horizontal overflow", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(page.locator(".beginner-guide")).toBeVisible();
+  await page.getByRole("button", { name: "Try 1. e4", exact: true }).click();
+  await expect(page.getByText(/Engine played/).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".move-lesson").filter({ hasText: "e4: pawn from e2 to e4" })).toBeVisible();
+  const overflow = await page.evaluate(() => ({
+    document: document.documentElement.scrollWidth > innerWidth,
+    main: document.querySelector("main")!.scrollWidth > document.querySelector("main")!.clientWidth,
+  }));
+  expect(overflow).toEqual({ document: false, main: false });
+});
+
+test("Chinese lessons, larger text, reduced motion, and skip link persist accessibly", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.locator(".skip-link").focus();
+  await expect(page.locator(".skip-link")).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#main-content")).toBeFocused();
+
+  await page.locator("#guide-language").selectOption("zh");
+  await expect(page.getByRole("heading", { name: "走出第一步，就已经开始了" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  await expect(page.locator("#language-select")).toHaveValue("zh");
+  await page.locator("#setting-large-text").check();
+  await page.locator("#setting-reduce-motion").check();
+  await expect(page.locator("body")).toHaveAttribute("data-text-size", "large");
+  await expect(page.locator("body")).toHaveAttribute("data-motion", "reduce");
+  await expect.poll(() => page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("zen-chess-lab", 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const state = await new Promise<{ settings?: { language: string; largeText: boolean; reduceMotion: boolean } }>((resolve, reject) => {
+      const request = db.transaction("state", "readonly").objectStore("state").get("current");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+    return state.settings?.language === "zh" && state.settings.largeText && state.settings.reduceMotion;
+  })).toBe(true);
+  await page.reload();
+  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  await expect(page.locator("#language-select")).toHaveValue("zh");
+  await expect(page.locator("#setting-large-text")).toBeChecked();
+  await expect(page.locator("#setting-reduce-motion")).toBeChecked();
+
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "走出第一步，就已经开始了" })).toBeVisible();
+  const motion = await page.locator("main > *").first().evaluate((element) => getComputedStyle(element).animationName);
+  expect(motion).toBe("none");
+  await page.getByRole("button", { name: "试试 1. e4", exact: true }).click();
+  await expect(page.getByText(/Engine played/).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".move-lesson").filter({ hasText: "e4：兵从 e2 到 e4" })).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+  expect(overflow).toBe(false);
+});
