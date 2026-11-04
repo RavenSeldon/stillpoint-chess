@@ -1,9 +1,14 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+
+async function openPlay(page: Page) {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+}
 
 test("desktop play uses real Stockfish and produces a review", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto("/");
+  await openPlay(page);
   await expect(page.locator(".square")).toHaveCount(64);
   await expect(page.getByRole("heading", { name: "The Practice Board" })).toBeVisible();
   await expect(page.getByText(/Stockfish 19 Lite runs locally/)).toBeVisible();
@@ -16,7 +21,7 @@ test("desktop play uses real Stockfish and produces a review", async ({ page }) 
 });
 
 test("bundled worker completes UCI handshake and returns a legal bestmove", async ({ page }) => {
-  await page.goto("/");
+  await openPlay(page);
   const bestmove = await page.evaluate(async () => {
     const worker = new Worker("./engine/stockfish-19-lite-single.js");
     worker.postMessage("uci");
@@ -41,7 +46,7 @@ test("bundled worker completes UCI handshake and returns a legal bestmove", asyn
 
 test("mobile training navigation and board remain within the viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await openPlay(page);
   await page.getByRole("button", { name: "Opening Dojo" }).click();
   await expect(page.getByRole("heading", { name: "Opening Dojo" })).toBeVisible();
   await page.locator("#drill-mode").click();
@@ -56,7 +61,7 @@ test("mobile training navigation and board remain within the viewport", async ({
 });
 
 test("piece artwork and visibility modes preserve the playable board", async ({ page }) => {
-  await page.goto("/");
+  await openPlay(page);
   await expect(page.locator(".square")).toHaveCount(64);
   await expect(page.locator(".piece-image")).toHaveCount(32);
   await expect.poll(() => page.locator(".piece-image").evaluateAll((images) => images.every((image) => {
@@ -78,7 +83,7 @@ test("piece artwork and visibility modes preserve the playable board", async ({ 
 });
 
 test("production app, engine, and training reload while offline", async ({ page, context }) => {
-  await page.goto("/");
+  await openPlay(page);
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
   await expect(page.locator(".square")).toHaveCount(64);
@@ -105,7 +110,7 @@ test("production app, engine, and training reload while offline", async ({ page,
 test("learning path records distinct practice attempts and opens a recommendation", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto("/");
+  await openPlay(page);
   await page.getByRole("button", { name: "Visualization" }).click();
   await page.getByRole("button", { name: "Square Color" }).click();
   await page.getByRole("button", { name: "Dark square" }).click();
@@ -130,7 +135,7 @@ test("learning path records distinct practice attempts and opens a recommendatio
 });
 
 test("all four colour themes are distinct and persist after reload", async ({ page }) => {
-  await page.goto("/");
+  await openPlay(page);
   await page.getByRole("button", { name: "Data & Privacy" }).click();
   const select = page.locator("#theme-select");
   await expect(select.locator("option")).toHaveCount(4);
@@ -158,7 +163,7 @@ test("all four colour themes are distinct and persist after reload", async ({ pa
 
 test("view motion, mobile tab centering, and reduced motion remain unobtrusive", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await openPlay(page);
   await page.getByRole("button", { name: "Visualization" }).click();
   await expect(page.locator("main")).toHaveClass(/view-enter/);
   const motion = await page.locator("main > *").first().evaluate((element) => getComputedStyle(element).animationName);
@@ -181,7 +186,7 @@ test("view motion, mobile tab centering, and reduced motion remain unobtrusive",
 
 test("recent practice survives navigation and reload with its settings", async ({ page }) => {
   const recoveryKey = "stillpoint.practice-recovery.v1";
-  await page.goto("/");
+  await openPlay(page);
   await page.locator("#coach-toggle").uncheck();
   await page.locator("#strength-choice").selectOption("2");
   await page.getByRole("textbox", { name: "Enter move in algebraic notation" }).fill("e4");
@@ -227,7 +232,7 @@ test("an expired practice snapshot is removed instead of restored", async ({ pag
       depth: 2,
     }));
   }, { key: recoveryKey });
-  await page.goto("/");
+  await openPlay(page);
   await expect(page.locator(".square")).toHaveCount(64);
   await expect(page.locator(".move-chip")).toHaveCount(0);
   await expect(page.locator(".board-note")).toContainText("Ready for a new game");
@@ -238,7 +243,7 @@ test("an expired practice snapshot is removed instead of restored", async ({ pag
 test("first-game guidance plays a real move and preserves both sides' explanations", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto("/");
+  await openPlay(page);
   await expect(page.getByRole("heading", { name: "Your first move is enough" })).toBeVisible();
   await page.getByRole("button", { name: "Try 1. e4", exact: true }).click();
   await expect(page.getByText(/Engine played/).first()).toBeVisible({ timeout: 30_000 });
@@ -252,7 +257,7 @@ test("first-game guidance plays a real move and preserves both sides' explanatio
 });
 
 test("guidance dismissal persists without disabling play and can be reversed", async ({ page }) => {
-  await page.goto("/");
+  await openPlay(page);
   await page.getByRole("button", { name: "Hide guidance", exact: true }).click();
   await expect(page.locator(".beginner-guide")).toHaveCount(0);
   await expect(page.getByRole("textbox", { name: "Enter move in algebraic notation" })).toBeEnabled();
@@ -275,7 +280,7 @@ test("guidance dismissal persists without disabling play and can be reversed", a
 });
 
 test("opening recall explains correct moves and revealed repertoire answers", async ({ page }) => {
-  await page.goto("/");
+  await openPlay(page);
   await page.getByRole("button", { name: "Opening Dojo" }).click();
   await page.locator("#drill-mode").click();
   await page.locator("#opening-move").fill("e4");
@@ -289,7 +294,7 @@ test("opening recall explains correct moves and revealed repertoire answers", as
 });
 
 test("starter Blunder Bank is nonjudgmental and reveals a concrete mate lesson", async ({ page }) => {
-  await page.goto("/");
+  await openPlay(page);
   await page.getByRole("button", { name: "Blunder Bank" }).click();
   await expect(page.getByText("This is a practice pattern, not one of your mistakes. Find checkmate in one move.")).toBeVisible();
   await page.getByRole("button", { name: "Reveal & explain" }).click();
@@ -300,7 +305,7 @@ test("starter Blunder Bank is nonjudgmental and reveals a concrete mate lesson",
 
 test("mobile onboarding and move lessons avoid horizontal overflow", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await openPlay(page);
   await expect(page.locator(".beginner-guide")).toBeVisible();
   await page.getByRole("button", { name: "Try 1. e4", exact: true }).click();
   await expect(page.getByText(/Engine played/).first()).toBeVisible({ timeout: 30_000 });
@@ -314,7 +319,7 @@ test("mobile onboarding and move lessons avoid horizontal overflow", async ({ pa
 
 test("Chinese lessons, larger text, reduced motion, and skip link persist accessibly", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await openPlay(page);
   await page.locator(".skip-link").focus();
   await expect(page.locator(".skip-link")).toBeFocused();
   await page.keyboard.press("Enter");
@@ -362,7 +367,7 @@ test("Chinese lessons, larger text, reduced motion, and skip link persist access
 
 test("French and Dutch teaching persist and fit a mobile viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await openPlay(page);
   await expect(page.locator("#guide-language")).toHaveValue("en");
   await expect(page.locator("#guide-language option")).toHaveCount(4);
   expect(await page.locator("#guide-language").evaluate((select: HTMLSelectElement) => Array.from(select.options, (option) => option.value))).toEqual(["en", "zh", "fr", "nl"]);
@@ -405,4 +410,63 @@ test("French and Dutch teaching persist and fit a mobile viewport", async ({ pag
   await expect(page.getByRole("heading", { name: "Je eerste zet is genoeg" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "nl");
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+});
+
+test("Today opens a real recommendation and resumes an unfinished practice", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "One useful move is enough." })).toBeVisible();
+  await expect(page.locator(".today-focus .btn.primary")).toHaveCount(1);
+  await expect(page.locator("#today-start")).toHaveText("Enter the practice board");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+
+  await page.locator("#today-start").click();
+  await expect(page.getByRole("heading", { name: "The Practice Board" })).toBeVisible();
+  await page.getByRole("button", { name: "Try 1. e4", exact: true }).click();
+  await expect(page.getByText(/Engine played/).first()).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Today", exact: true }).click();
+  await expect(page.locator("#today-focus-title")).toHaveText("Return to your board");
+  await page.locator("#today-start").click();
+  await expect(page.locator(".move-chip")).toHaveCount(2);
+  await expect(page.getByText(/Engine played/).first()).toBeVisible();
+});
+
+test("simulated Android installation reports prompts and confirmation honestly", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "userAgent", { get: () => "Mozilla/5.0 (Linux; Android 16) Chrome/156.0.0.0 Mobile Safari/537.36" });
+  });
+  await openPlay(page);
+  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  await expect(page.locator(".install-check")).toHaveCount(4);
+  await expect(page.locator(".install-check").filter({ hasText: "Secure context" })).toContainText("Ready");
+  await expect(page.locator(".install-check").filter({ hasText: "Manifest link" })).toContainText("Found");
+  await expect(page.locator(".install-check").filter({ hasText: "Offline assets" })).toContainText("Ready");
+  await expect(page.locator(".install-check").filter({ hasText: "Browser install prompt" })).toContainText("Not offered");
+  await expect(page.locator(".install-panel")).toContainText("On Android Chrome");
+  await expect(page.locator("#install-app")).toHaveCount(0);
+
+  await page.evaluate(() => {
+    const event = new Event("beforeinstallprompt", { cancelable: true });
+    Object.assign(event, {
+      prompt: async () => undefined,
+      userChoice: Promise.resolve({ outcome: "accepted" }),
+    });
+    window.dispatchEvent(event);
+  });
+  await expect(page.locator("#install-app")).toBeVisible();
+  await expect(page.locator(".install-check").filter({ hasText: "Browser install prompt" })).toContainText("Available");
+  await page.locator("#install-app").click();
+  await expect(page.locator(".install-result")).toContainText("Installation accepted");
+  await expect(page.locator(".install-result")).toContainText("Waiting for the browser");
+  await expect(page.locator(".install-state")).toHaveText("Browser tab");
+
+  await page.evaluate(() => window.dispatchEvent(new Event("appinstalled")));
+  await expect(page.locator(".install-result")).toContainText("Installed. Stillpoint can now open from your app launcher.");
+  await expect(page.locator(".install-state")).toHaveText("Installed app");
+  await expect(page.locator(".install-check").filter({ hasText: "Browser install prompt" })).toContainText("Not needed");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+  expect(errors).toEqual([]);
 });

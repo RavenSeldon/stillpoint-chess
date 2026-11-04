@@ -14,7 +14,7 @@
 | `npm run build` | PASS — strict TypeScript, Vite production bundle, generated service worker, 43 local assets precached |
 | `npm run test:unit` | PASS — 46 passed, 0 failed; includes initial perft 20/400/8902, chess rules, English/Chinese/French/Dutch move explanations, authored-content coverage, PGN round trips, evaluation/mate parsing, SRS, knight BFS, backup/preference validation, adaptive learning, and recovery validation/expiry |
 | `npm run test:static` | PASS — all 43 assets, Stockfish WASM, manifest, and icons served beneath `/sample-repository/` |
-| `npm run test:e2e` | PASS — 17 Chromium tests passed, 0 failed/skipped |
+| `npm run test:e2e` | PASS — 19 Chromium tests passed, 0 failed/skipped |
 | Real engine game and coach review | PASS — legal user move, real Stockfish reply, two move records, and review UI observed in Chromium |
 | Beginner teaching | PASS — first-game e4 action produced a real engine reply; separate learner/opponent lessons and the preferred-move explanation remained visible |
 | Optional guidance | PASS — dismissal removed extended lessons without disabling play; the preference survived reload and could be re-enabled |
@@ -24,6 +24,8 @@
 | Mobile training flow | PASS at 390 × 844 — Opening Dojo, Visualization, feedback, and no main-content horizontal overflow |
 | Mobile beginner layout | PASS at 390 × 844 — onboarding and English/Chinese/French/Dutch lessons produced no document or main-content horizontal overflow |
 | Learning Path flow | PASS — two distinct Visualization attempts appeared in the activity trail; answered prompts locked against duplicate taps; the recommendation opened the intended exercise |
+| Today flow | PASS — a fresh visit opened one real recommendation; the primary action reached Play; after a real two-ply game, Today offered Resume practice and restored both moves |
+| Installation lifecycle | PASS with simulated browser events at 390 × 844 — Android instructions and four diagnostics appeared; no install button existed without a prompt; an accepted prompt remained Browser tab until `appinstalled` confirmed installation |
 | Four-theme flow | PASS — Indigo Focus, Lavender Paper, Forest Quiet, and Ember Study reached distinct final backgrounds after their transitions; Ember Study persisted after reload |
 | Motion and mobile navigation | PASS — view entrance ran normally; active mobile tab centered; system and in-app reduced-motion settings removed animation |
 | Practice recovery | PASS — a real two-ply game, Black orientation, Coach off, and depth 2 survived navigation and reload; an expired snapshot was removed and a fresh board shown |
@@ -31,7 +33,7 @@
 | Piece artwork and visibility modes | PASS — 32 local SVGs loaded; Ghost remained at 25% opacity; Discs and Full blindfold changed rendering as intended; accessible square labels and Standard mode remained intact |
 | Offline production reentry | PASS — service worker cached WASM and artwork; after offline reload, 32 visible/loaded SVG pieces, training, and Stockfish reply still worked |
 | PGN regression | PASS — exported result is not duplicated and the exported game round-trips to the same final FEN |
-| Visual inspection | PASS at 1440 × 1000 desktop and 390 × 844 mobile viewports; first-game Play and settled Simplified Chinese, French, and Dutch onboarding inspected without overflow; mobile language selectors stack to preserve full option labels |
+| Visual inspection | PASS at 1440 × 1000 desktop and 390 × 844 mobile viewports; Today, Android installation guidance, first-game Play, and settled multilingual onboarding inspected without overflow; no console errors or failed asset requests occurred in the final Today/install inspection |
 
 The complete `npm run verify` sequence was executed successfully. Browser tests ran against the production build through Vite preview. The production bundle is approximately 2.6 MB, dominated by the locally cached Stockfish WASM asset.
 
@@ -53,6 +55,8 @@ The complete `npm run verify` sequence was executed successfully. Browser tests 
 - Kept the learner’s latest explanation visible after the engine replies, rather than replacing it with the opponent’s move.
 - Added persistent English/Simplified Chinese/French/Dutch teaching preferences, larger text, explicit reduced motion, a keyboard skip link, and cleaner accessible navigation names.
 - Stacked mobile language selectors after visual inspection showed that longer option labels needed more room.
+- Added a Today home that reuses the existing explainable recommendations and resumes an unfinished practice without duplicating game state.
+- Added browser-specific installation instructions, four live diagnostics, visible outcomes, and a strict distinction between prompt acceptance and browser-confirmed installation.
 
 ## Not verified or intentionally not claimed
 

@@ -26,6 +26,7 @@ The deployable static site is generated in `dist/`. Do not open it through `file
 
 - **Play:** tap, drag, SAN, or UCI input; White, Black, or random side; custom FEN/PGN; untimed and timed practice; takeback in untimed games; draw claims; resignation; board flip; blindfold visibility levels; PGN export; ten-minute recovery of the latest practice position and settings after leaving or reloading.
 - **Optional beginner teaching:** a dismissible first-game guide, plain-language notation readings, concrete explanations for both sides’ latest moves, and honest descriptions of engine preferences. One persistent guidance switch controls onboarding and extended lessons without removing core controls, answers, reviews, or progress.
+- **Today:** a calm home view with one primary next step, an explainable recommendation from existing learning history, weekly activity and review counts, free practice, and direct resumption of an unfinished board. Recent practice recovery still opens the board directly.
 - **Learning Path:** four actionable recommendations, seven practice-readiness signals, relative strengths and growth edges, recent trends, evidence labels, and an activity trail. Every recommendation opens a real local exercise.
 - **Four complete themes:** Indigo Focus, Lavender Paper, Forest Quiet, and Ember Study, each with coordinated navigation, panels, controls, and board colors. Legacy light/dark preferences migrate automatically.
 - **Language and reading access:** English by default, with Simplified Chinese, French, and Dutch for the first-game guide, generated move lessons, and starter Blunder Bank lessons; persistent larger-text and reduced-motion options; a keyboard skip link; decorative navigation icons hidden from assistive technology. The wider interface and authored opening/master notes remain English.
@@ -38,7 +39,7 @@ The deployable static site is generated in `dist/`. Do not open it through `file
 - **Blunder Bank:** three starter mate-in-one examples plus deduplicated positions captured from completed coach analysis.
 - **Classical Masters:** five complete, legally replayable historical scores with original notes and Guess the Move.
 - **Data ownership:** IndexedDB persistence, timestamped learning history, versioned JSON backup, deduplicated merge/validated overwrite import, PGN export, and two-step data reset that also removes practice recovery. Temporary recovery snapshots use local storage, expire after ten minutes, and are not included in backups.
-- **PWA:** manifest, icons, standalone display, Chromium install prompt support, versioned service-worker cache, and locally bundled runtime assets.
+- **PWA:** manifest, icons, standalone display, Chromium install prompt support, versioned service-worker cache, and locally bundled runtime assets. Data & Privacy shows secure-context, manifest-link, offline-readiness, and install-prompt diagnostics; browser-specific guidance distinguishes accepted prompts, confirmed installation, and shortcut-only outcomes.
 
 ## Offline and mobile installation
 
@@ -49,10 +50,10 @@ Offline mode begins **after a successful first online load**, not before it. The
 1. Deploy through GitHub Pages or serve locally.
 2. Open the app once while online and wait for the service worker to finish caching.
 3. In **Data & Privacy**, confirm **Offline assets ready**.
-4. When Chromium offers installation, use **Install Stillpoint** in that panel or the browser’s **Install app** menu item.
+4. When Chromium offers installation, use **Install Stillpoint** in that panel or the browser’s **Install app** menu item. On Android, **Add to Home screen** may lead to an app-install dialog on compatible versions; if it creates only a shortcut, the browser/device has not offered an installed-app session.
 5. Relaunch once while offline to verify the installed copy on the specific device.
 
-Installation UI varies by browser and operating system. If Chromium does not offer installation, the same app still works as a normal web page. iOS/Safari installation and low-memory device behavior have not been verified in this release.
+Installation UI varies by browser and operating system. The in-app install button appears only for a real browser prompt, and an accepted choice is not reported as installed until the browser confirms it. If Chromium does not offer installation, the same app still works as a normal web page. Physical Android installation, iOS/Safari installation, and low-memory device behavior remain unverified in this release.
 
 ## GitHub Pages deployment
 

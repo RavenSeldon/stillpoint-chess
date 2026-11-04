@@ -65,6 +65,7 @@ function parseTime(value: string) {
   return { remaining: [minutes * 60, minutes * 60], inc };
 }
 const nav = [
+  ["today", "Today", "☼"],
   ["path", "Learning Path", "✦"],
   ["play", "Play", "♞"],
   ["openings", "Opening Dojo", "◇"],
@@ -110,7 +111,7 @@ export class App {
   private db = new LocalDatabase();
   private state: SaveState = freshState();
   private engine = new OfflineEngineAdapter();
-  private view = "play";
+  private view = "today";
   private game = new Chess();
   private board: BoardView | null = null;
   private player: Color = "w";
@@ -133,7 +134,10 @@ export class App {
   private depth = 3;
   private reviews: ReviewEntry[] = [];
   private installPrompt: InstallPromptEvent | null = null;
+  private installStatus = "";
+  private installed = false;
   private offlineReady = false;
+  private offlineFailed = false;
   private online = navigator.onLine;
   private lastArrow: { uci: string; color: "green" | "red" } | null = null;
   private coachMessage = "";
@@ -196,14 +200,22 @@ export class App {
       await this.db.write(this.state);
     }
     const recovered = this.restorePracticeRecovery();
+    if (recovered) this.view = "play";
     window.addEventListener("beforeinstallprompt", (event) => {
       event.preventDefault();
       this.installPrompt = event as InstallPromptEvent;
+      this.installStatus = "";
       if (this.view === "settings") this.render();
     });
     window.addEventListener("appinstalled", () => {
       this.installPrompt = null;
-      this.announce("Stillpoint installed");
+      this.installed = true;
+      this.installStatus = "Installed. Stillpoint can now open from your app launcher.";
+      this.announce(this.installStatus);
+      if (this.view === "settings") this.render();
+    });
+    window.matchMedia("(display-mode: standalone)").addEventListener("change", (event) => {
+      if (event.matches) this.installed = true;
       if (this.view === "settings") this.render();
     });
     const updateNetwork = () => {
@@ -215,8 +227,13 @@ export class App {
     if ("serviceWorker" in navigator)
       navigator.serviceWorker.ready.then(() => {
         this.offlineReady = true;
+        this.offlineFailed = false;
         if (this.view === "settings") this.render();
-      }).catch(() => { this.offlineReady = false; });
+      }).catch(() => {
+        this.offlineReady = false;
+        this.offlineFailed = true;
+        if (this.view === "settings") this.render();
+      });
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
         this.savePracticeRecovery();
@@ -493,6 +510,9 @@ export class App {
       });
     });
     switch (this.view) {
+      case "today":
+        this.wireToday();
+        break;
       case "path":
         this.wirePath();
         break;
@@ -521,6 +541,8 @@ export class App {
   }
   private renderMain() {
     switch (this.view) {
+      case "today":
+        return this.todayHtml();
       case "path":
         return this.pathHtml();
       case "play":
@@ -557,6 +579,32 @@ export class App {
       lastMove: game.history.at(-1)?.uci,
       arrow: this.lastArrow,
       ...options,
+    });
+  }
+  private hasActivePractice() {
+    return this.playMode === "play" && this.game.history.length > 0 && !this.gameResult;
+  }
+  private todayHtml() {
+    const profile = buildLearningProfile(this.state);
+    const next = profile.recommendations[0];
+    const resumable = this.hasActivePractice();
+    const title = resumable ? "Return to your board" : next.title;
+    const reason = resumable
+      ? "Your practice position is still here. Continue when you are ready; there is no clock to beat unless you chose one."
+      : next.reason;
+    const action = resumable ? "Resume practice" : next.action;
+    const dueLines = Object.values(this.state.srs).filter((item) => due(item)).length;
+    return `<div class="workspace-heading"><div><span class="overline">TODAY · YOUR PRACTICE</span><h1>One useful move is enough.</h1><p>A quiet next step, shaped by your practice on this device.</p></div><span class="current-mode">PRIVATE & OFFLINE-READY <span class="status-dot"></span></span></div>
+      <div class="today-layout"><section class="today-focus" aria-labelledby="today-focus-title"><span class="overline">${resumable ? "WELCOME BACK" : "RECOMMENDED NEXT"}</span><h2 id="today-focus-title">${esc(title)}</h2><p class="today-reason">${esc(reason)}</p>${btn("today-start", esc(action), "primary")}<p class="helper">No streaks to protect and no rating to prove. Choose one useful thing, then stop when you have had enough.</p></section>
+      <aside class="today-details" aria-labelledby="today-details-title"><h2 id="today-details-title">Your practice, at a glance</h2><div class="today-metrics"><div><b>${profile.recentAttempts}</b><span>Learning activities<br>this week</span></div><div><b>${dueLines}</b><span>Opening lines<br>due for review</span></div></div><p>${profile.recordedAttempts ? "Recommendations use your local games and exercise history. You can inspect the evidence at any time." : "Start with a gentle baseline. Stillpoint will explain its recommendations as your history grows."}</p><div class="today-links"><button class="btn" type="button" data-view="play">Free practice</button><button class="btn" type="button" data-view="path">View learning path</button></div><p class="helper">Everything stays on this device. Export a backup before clearing browser storage.</p></aside></div>`;
+  }
+  private wireToday() {
+    this.bind("today-start", () => {
+      if (this.hasActivePractice()) this.switchView("play");
+      else {
+        const next = buildLearningProfile(this.state).recommendations[0];
+        if (next) this.openRecommendation(next);
+      }
     });
   }
   private pathHtml() {
@@ -1799,12 +1847,23 @@ export class App {
       this.render();
     });
   }
+  private installHtml() {
+    const installed = this.installed || window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    const android = /Android/i.test(navigator.userAgent);
+    const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const offlineText = this.offlineReady ? "Ready" : this.offlineFailed ? "Unavailable" : "serviceWorker" in navigator ? "Preparing" : "Not supported";
+    const instructions = installed
+      ? "Installed app display is active. Your records still belong to this browser profile on this device."
+      : android
+        ? "On Android Chrome, use a normal browser tab and open ⋮ → Install app when offered. If you see Add to Home screen, continue once: compatible versions may still show an app-install dialog. If only a shortcut is created, this browser or device has not offered an installed-app session; the shortcut still opens the same practice."
+        : ios
+          ? "On iPhone or iPad, use Safari’s Share → Add to Home Screen. Installation and offline behavior vary by browser and operating system."
+          : "In Chrome or Chromium, use the browser menu → Install app when offered. If no installation choice appears, this browser has not offered one; the app remains usable as a web page.";
+    return `<section class="install-panel" aria-labelledby="install-title"><div class="install-heading"><h3 id="install-title">Install & offline</h3><span class="install-state">${installed ? "Installed app" : "Browser tab"}</span></div><p class="status-message"><span class="status-dot"></span> ${this.online ? "Online" : "Offline"} · ${this.offlineReady ? "Offline assets ready" : offlineText === "Unavailable" ? "Offline assets unavailable" : offlineText === "Not supported" ? "Offline worker not supported" : "Preparing offline assets"}</p>${this.installPrompt && !installed ? btn("install-app", "Install Stillpoint", "primary") : ""}${this.installStatus ? `<p class="install-result">${esc(this.installStatus)}</p>` : ""}<div class="install-checks" aria-label="Installation diagnostics"><div class="install-check"><span>Secure context</span><b>${window.isSecureContext ? "Ready" : "Required"}</b></div><div class="install-check"><span>Manifest link</span><b>${document.querySelector('link[rel="manifest"]') ? "Found" : "Missing"}</b></div><div class="install-check"><span>Offline assets</span><b>${offlineText}</b></div><div class="install-check"><span>Browser install prompt</span><b>${installed ? "Not needed" : this.installPrompt ? "Available" : "Not offered"}</b></div></div><p class="helper">${instructions}</p><p class="helper">The install button appears only after the browser supplies a real installation prompt. Accepting a prompt is not called “installed” until the browser confirms it. The app shell, training content, chess.js, and Stockfish are cached locally after the first successful online load.</p></section>`;
+  }
   private settingsHtml() {
     const s = this.state;
     const summary = `<div class="metrics wide"><div><b>${s.games.length}</b><small>Saved games</small></div><div><b>${s.blunders.length}</b><small>Blunders</small></div><div><b>${Object.keys(s.srs).length}</b><small>Trained lines</small></div></div>`;
-    const install = this.installPrompt
-      ? btn("install-app", "Install Stillpoint", "primary")
-      : `<p class="helper">In Chrome or Chromium, use the browser menu → “Cast, save, and share” or “More tools” → “Install app” when offered. Installation requires HTTPS or localhost.</p>`;
     const themeOptions = ([
       ["indigo", "Indigo Focus"],
       ["paper", "Lavender Paper"],
@@ -1814,20 +1873,31 @@ export class App {
     const panel = this.panel(
       "Your data stays here",
       `${summary}<p>No game, position, or learning signal is sent to an analysis service. Current results are stored in this browser’s IndexedDB; a temporary practice snapshot is kept in local storage for 10 minutes. Clearing browser storage or uninstalling may remove them; export a backup first.</p>
-   <div class="button-row">${btn("export-backup", "Export JSON backup", "primary")}<label for="import-backup" class="btn">Import backup</label><input id="import-backup" class="sr-only" type="file" accept="application/json,.json"></div><p class="helper">Imports are validated before they replace or merge with current data.</p><div class="section-rule"></div><div class="field-row"><label for="theme-select">Colour theme</label><select id="theme-select">${themeOptions}</select></div>${this.languageControl("language-select")}<p class="helper">Simplified Chinese, French, and Dutch cover the first-game guide, generated move lessons, and starter Blunder Bank lessons. Authored opening notes, master commentary, and the wider interface remain English.</p><label class="check-line"><input id="setting-coords" type="checkbox" ${s.settings.coords ? "checked" : ""}> Show board coordinates</label><label class="check-line"><input id="setting-guidance" type="checkbox" ${s.settings.guidance ? "checked" : ""}> Beginner guidance and plain-language move lessons</label><p class="helper">Turn guidance off to hide onboarding and extended explanations. Core controls, answers, engine reviews, and progress remain available.</p><label class="check-line"><input id="setting-large-text" type="checkbox" ${s.settings.largeText ? "checked" : ""}> Larger interface text</label><label class="check-line"><input id="setting-reduce-motion" type="checkbox" ${s.settings.reduceMotion ? "checked" : ""}> Reduce animations and smooth scrolling</label><div class="section-rule"></div>${btn("clear-data", "Clear all local progress", "danger")}<div class="section-rule"></div><h3>Install & offline</h3><p class="status-message"><span class="status-dot"></span> ${this.online ? "Online" : "Offline"} · ${this.offlineReady ? "Offline assets ready" : "Preparing offline assets"}</p>${install}<p class="helper">The app shell, training content, chess.js, and Stockfish WASM are cached together after a successful first online visit. Keep this version cached before going offline.</p>`,
+   <div class="button-row">${btn("export-backup", "Export JSON backup", "primary")}<label for="import-backup" class="btn">Import backup</label><input id="import-backup" class="sr-only" type="file" accept="application/json,.json"></div><p class="helper">Imports are validated before they replace or merge with current data.</p><div class="section-rule"></div><div class="field-row"><label for="theme-select">Colour theme</label><select id="theme-select">${themeOptions}</select></div>${this.languageControl("language-select")}<p class="helper">Simplified Chinese, French, and Dutch cover the first-game guide, generated move lessons, and starter Blunder Bank lessons. Authored opening notes, master commentary, and the wider interface remain English.</p><label class="check-line"><input id="setting-coords" type="checkbox" ${s.settings.coords ? "checked" : ""}> Show board coordinates</label><label class="check-line"><input id="setting-guidance" type="checkbox" ${s.settings.guidance ? "checked" : ""}> Beginner guidance and plain-language move lessons</label><p class="helper">Turn guidance off to hide onboarding and extended explanations. Core controls, answers, engine reviews, and progress remain available.</p><label class="check-line"><input id="setting-large-text" type="checkbox" ${s.settings.largeText ? "checked" : ""}> Larger interface text</label><label class="check-line"><input id="setting-reduce-motion" type="checkbox" ${s.settings.reduceMotion ? "checked" : ""}> Reduce animations and smooth scrolling</label><div class="section-rule"></div>${btn("clear-data", "Clear all local progress", "danger")}<div class="section-rule"></div>${this.installHtml()}`,
       "PRIVACY BY DESIGN",
     );
     return `<div class="workspace-heading"><div><span class="overline">08 / DATA & PRIVACY</span><h1>Your Space</h1><p>Ownership includes the ability to leave with your records.</p></div></div><div class="settings-layout">${panel}<div class="panel"><span class="overline">IMPLEMENTATION STATUS</span><h2>Built to tell the truth</h2><p>This release uses mature chess rules and real local Stockfish analysis. Its learning path is explainable and evidence-bounded, not a claim of calibrated chess measurement.</p><div class="feature-status"><b>Included</b><p>Adaptive practice recommendations, timestamped learning history, six Stockfish tiers, live coaching, review turning points, opening SRS, four visual exercises, classical games, endgames, Blunder Bank, backup/restore, four colour themes, and a complete offline asset cache.</p><b>Still bounded</b><p>Opening coverage is a starter repertoire; calculation sequences train opening recall rather than certified tactics; endgames use objective-based practice without tablebase claims; reviews analyze your moves rather than every engine reply.</p></div></div></div>`;
   }
   private wireSettings() {
-    this.bind("install-app", () => {
+    this.bind("install-app", async () => {
       const prompt = this.installPrompt;
       if (!prompt) return;
-      prompt.prompt().then(() => prompt.userChoice).then((choice) => {
-        this.announce(`Installation ${choice.outcome}`);
-        if (choice.outcome === "accepted") this.installPrompt = null;
+      try {
+        await prompt.prompt();
+        const choice = await prompt.userChoice;
+        this.installPrompt = null;
+        this.installStatus = choice.outcome === "accepted"
+          ? "Installation accepted. Waiting for the browser to confirm installation."
+          : "Installation dismissed. Nothing has changed.";
+        this.announce(this.installStatus);
         this.render();
-      }).catch((error) => this.announce("Installation unavailable: " + error.message));
+      } catch (error) {
+        this.installPrompt = null;
+        this.installStatus = "The browser could not open installation. Use the menu instructions below instead.";
+        this.announce(this.installStatus);
+        console.warn("Installation prompt failed", error);
+        this.render();
+      }
     });
     this.bind("export-backup", () =>
       download(
