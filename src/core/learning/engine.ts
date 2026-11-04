@@ -161,6 +161,49 @@ function recommendationFor(area: LearningArea, skill: SkillProfile, key?: string
   return recommendation;
 }
 
+/**
+ * The three outcome measures the project is judged by, computed only from
+ * local records. Each counts different evidence so recognition, retention,
+ * and transfer stay separate questions with separate answers.
+ */
+export type LearningEvidence = {
+  /** Openings and pattern repairs completed: independently, with hints, or not completed. */
+  recall: { independent: number; assisted: number; unsuccessful: number };
+  /** Personal mistakes revisited a day or more after capture; retained = re-solved without hints. */
+  retention: { retained: number; delayed: number };
+  /** Verified patterns attempted in unseen positions; transferred = solved without hints. */
+  transfer: { transferred: number; attempts: number };
+};
+
+export function buildLearningEvidence(state: Pick<SaveState, "learning" | "blunders">): LearningEvidence {
+  const recall = { independent: 0, assisted: 0, unsuccessful: 0 };
+  const retention = { retained: 0, delayed: 0 };
+  const transfer = { transferred: 0, attempts: 0 };
+  const personal = new Map(
+    state.blunders.filter((blunder) => !blunder.starter && blunder.timestamp !== undefined).map((blunder) => [blunder.id, blunder.timestamp!]),
+  );
+  for (const attempt of state.learning) {
+    const assisted = attempt.key.endsWith("#assisted");
+    const key = assisted ? attempt.key.slice(0, -"#assisted".length) : attempt.key;
+    if (key.startsWith("transfer:")) {
+      transfer.attempts += 1;
+      if (attempt.correct && !assisted) transfer.transferred += 1;
+      continue;
+    }
+    if (attempt.area === "openings" || attempt.area === "tactics") {
+      if (!attempt.correct) recall.unsuccessful += 1;
+      else if (assisted) recall.assisted += 1;
+      else recall.independent += 1;
+    }
+    const captured = attempt.area === "tactics" ? personal.get(key) : undefined;
+    if (captured !== undefined && attempt.timestamp >= captured + DAY) {
+      retention.delayed += 1;
+      if (attempt.correct && !assisted) retention.retained += 1;
+    }
+  }
+  return { recall, retention, transfer };
+}
+
 export function buildLearningProfile(state: LearningState, now = Date.now()): LearningProfile {
   const evidence = collectEvidence(state);
   const skills = skillOrder.map((id): SkillProfile => {

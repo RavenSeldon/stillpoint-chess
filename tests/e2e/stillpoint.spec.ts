@@ -492,3 +492,51 @@ test("simulated Android installation reports prompts and confirmation honestly",
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   expect(errors).toEqual([]);
 });
+
+test("Learning Path measures independent recall, retention, and transfer honestly", async ({ page }) => {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Learning Path", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Is it sticking?" })).toBeVisible();
+  // A fresh profile shows honest empty states, not fabricated numbers.
+  await expect(page.locator(".evidence-metrics")).toContainText("Independent recall");
+  await expect(page.locator(".evidence-metrics")).toContainText("Delayed retention");
+  await expect(page.locator(".evidence-metrics")).toContainText("Transfer");
+  await expect(page.getByText("Recall evidence appears after opening rehearsal or pattern repair.")).toBeVisible();
+  await expect(page.getByText("Transfer tests appear after you repair a personal mistake that has a verified pattern.")).toBeVisible();
+
+  // Seed recorded evidence: one independent opening recall, one assisted,
+  // one delayed independent repair of a personal mistake, one transfer success.
+  await page.evaluate(() => {
+    const DAY = 86_400_000;
+    const now = Date.now();
+    return new Promise<void>((resolve, reject) => {
+      const open = indexedDB.open("zen-chess-lab", 1);
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result;
+        const read = db.transaction("state", "readonly").objectStore("state").get("current");
+        read.onerror = () => reject(read.error);
+        read.onsuccess = () => {
+          const state = read.result;
+          state.blunders.push({ id: "own", fen: "6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1", bad: "Re2", best: "Re8#", solved: 1, starter: false, title: "Back-rank lesson", timestamp: now - 5 * DAY, intervalDays: 3, nextDueTimestamp: now - DAY });
+          state.learning.push(
+            { id: "e1", area: "openings", correct: true, key: "italian", timestamp: now - DAY },
+            { id: "e2", area: "openings", correct: true, key: "french#assisted", timestamp: now - DAY },
+            { id: "e3", area: "tactics", correct: true, key: "own", timestamp: now - 2 * DAY },
+            { id: "e4", area: "tactics", correct: true, key: "transfer:fork", timestamp: now - DAY },
+          );
+          const tx = db.transaction("state", "readwrite");
+          tx.objectStore("state").put(state, "current");
+          tx.oncomplete = () => { db.close(); resolve(); };
+          tx.onerror = () => reject(tx.error);
+        };
+      };
+    });
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Learning Path", exact: true }).click();
+  const metrics = page.locator(".evidence-metrics");
+  await expect(metrics).toContainText("2/3"); // independent recall: italian + own repair; french assisted
+  await expect(metrics).toContainText("1/1"); // delayed retention and transfer
+  await expect(page.getByText(/used a hint and is counted separately/)).toBeVisible();
+});

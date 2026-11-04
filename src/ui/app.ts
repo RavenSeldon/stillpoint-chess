@@ -26,7 +26,7 @@ import {
 } from "../core/storage/db.js";
 import { PRACTICE_RECOVERY_KEY, parsePracticeRecovery } from "../core/storage/recovery.js";
 import { freshSrs, due, review, reviewAssisted } from "../core/srs/scheduler.js";
-import { buildLearningProfile, type Recommendation } from "../core/learning/engine.js";
+import { buildLearningEvidence, buildLearningProfile, type Recommendation } from "../core/learning/engine.js";
 import { explainMove } from "../core/learning/explanations.js";
 import { guideCopy, languageNames, languageTags, lessonCopy, lessonLanguages, starterLessons, type LessonLanguage } from "../core/learning/languages.js";
 import {
@@ -651,7 +651,28 @@ export class App {
       <div class="path-overview"><section class="panel path-intro"><span class="overline">A LIVING PRACTICE</span><h2>${profile.recordedAttempts ? "Your path is adapting" : "Begin with a gentle baseline"}</h2><p>${insight}</p><div class="metrics wide"><div><b>${profile.recentAttempts}</b><small>Attempts · 7 days</small></div><div><b>${this.state.games.filter((game) => !game.mode || game.mode === "play").length}</b><small>Practice games</small></div><div><b>${Object.values(this.state.srs).filter((item) => due(item)).length}</b><small>Lines due</small></div></div></section>
       <section class="panel"><span class="overline">HOW TO READ THIS</span><h2>Signals, not judgments</h2><p>Readiness combines observed outcomes, recency, and a small neutral prior. Confidence grows with evidence. It is not Elo, a diagnosis, or a prediction of your potential.</p><p class="helper">Recommendations always open the existing local exercises; no account or remote analysis is used.</p></section></div>
       <div class="learning-grid"><section class="panel"><span class="overline">RECOMMENDED NEXT</span><h2>Your next four steps</h2><div class="recommendation-list">${recommendations}</div></section><section class="panel"><span class="overline">PRACTICE PROFILE</span><h2>Strengths & growth edges</h2><div class="skill-list">${skills}</div></section></div>
+      ${this.evidenceHtml()}
       <section class="panel activity-panel"><span class="overline">RECENT LEARNING</span><h2>Your practice trail</h2>${activity}</section>`;
+  }
+
+  /**
+   * The three measures the project judges itself by: independent recall,
+   * delayed retention, and transfer. Fractions over raw counts, never
+   * percentages dressed up as ratings; honest guidance when a measure has
+   * no evidence yet.
+   */
+  private evidenceHtml() {
+    const evidence = buildLearningEvidence(this.state);
+    const recallTotal = evidence.recall.independent + evidence.recall.assisted + evidence.recall.unsuccessful;
+    const metric = (done: number, total: number, label: string) =>
+      `<div><b>${total ? `${done}/${total}` : "—"}</b><small>${label}</small></div>`;
+    const notes: string[] = [];
+    if (recallTotal && evidence.recall.assisted)
+      notes.push(`${evidence.recall.assisted} completion${evidence.recall.assisted === 1 ? "" : "s"} used a hint and ${evidence.recall.assisted === 1 ? "is" : "are"} counted separately, not as independent recall.`);
+    if (!recallTotal) notes.push("Recall evidence appears after opening rehearsal or pattern repair.");
+    if (!evidence.retention.delayed) notes.push("Retention is measured when a repaired mistake from your own games is revisited a day or more later.");
+    if (!evidence.transfer.attempts) notes.push("Transfer tests appear after you repair a personal mistake that has a verified pattern.");
+    return `<section class="panel evidence-panel"><span class="overline">EVIDENCE OF LEARNING</span><h2>Is it sticking?</h2><p class="helper">Three measures, computed on this device only. They describe your recorded practice — not your potential.</p><div class="metrics wide evidence-metrics">${metric(evidence.recall.independent, recallTotal, "Independent recall · openings and repairs completed without hints")}${metric(evidence.retention.retained, evidence.retention.delayed, "Delayed retention · own mistakes re-solved a day or more later")}${metric(evidence.transfer.transferred, evidence.transfer.attempts, "Transfer · verified ideas solved in new positions")}</div>${notes.length ? `<p class="helper">${notes.map(esc).join(" ")}</p>` : ""}</section>`;
   }
   private wirePath() {
     const profile = buildLearningProfile(this.state);

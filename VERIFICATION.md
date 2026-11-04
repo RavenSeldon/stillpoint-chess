@@ -11,10 +11,10 @@
 
 | Check | Outcome |
 |---|---|
-| `npm run build` | PASS — strict TypeScript, Vite production bundle, generated service worker, 47 local assets precached |
-| `npm run test:unit` | PASS — 54 passed, 0 failed; includes initial perft 20/400/8902, chess rules, English/Chinese/French/Dutch move explanations, authored-content coverage, PGN round trips, evaluation/mate parsing, SRS (including assisted review), knight BFS, backup/preference validation, adaptive learning (including tier-contextualized game evidence and due-blunder scheduling), rules-verified tactical pattern classification, and recovery validation/expiry |
-| `npm run test:static` | PASS — all 47 assets, Stockfish WASM, manifest, and icons served beneath `/sample-repository/` |
-| `npm run test:e2e` | PASS — 24 tests per browser, 48 total: 24 Chromium + 24 WebKit, 0 failed/skipped |
+| `npm run build` | PASS — strict TypeScript, Vite production bundle, generated service worker, 48 local assets precached |
+| `npm run test:unit` | PASS — 56 passed, 0 failed; includes initial perft 20/400/8902, chess rules, English/Chinese/French/Dutch move explanations, authored-content coverage, PGN round trips, evaluation/mate parsing, SRS (including assisted review), knight BFS, backup/preference validation, adaptive learning (including tier-contextualized game evidence and due-blunder scheduling), rules-verified tactical pattern classification, learning-evidence measurement (independent recall, delayed retention, transfer), and recovery validation/expiry |
+| `npm run test:static` | PASS — all 48 assets, Stockfish WASM, manifest, and icons served beneath `/sample-repository/` |
+| `npm run test:e2e` | PASS — 25 tests per browser, 50 total: 25 Chromium + 25 WebKit, 0 failed/skipped |
 | Keyboard-only operation | PASS in Chromium and WebKit — skip link, all seven main views, move entry form, square selection, promotion chooser (including Escape cancel and underpromotion to rook) operated by keyboard alone; focus survives full app re-renders |
 | Real engine game and coach review | PASS — legal user move, real Stockfish reply, two move records, and review UI observed in Chromium |
 | Beginner teaching | PASS — first-game e4 action produced a real engine reply; separate learner/opponent lessons and the preferred-move explanation remained visible |
@@ -84,6 +84,11 @@ The complete `npm run verify` sequence was executed successfully. Browser tests 
 - A keyboard regression suite covers skip-link and navigation traversal, both move-entry paths (form and board squares), the promotion chooser (all four pieces, Escape cancel, underpromotion), and focus preservation across re-renders.
 - Keyboard traversal testing exposed a real defect: after selecting a square, its legal targets sat up to ~70 tab stops away. The board now groups the selected square and its legal targets at the front of the tab order while a selection is active, so a legal destination is one or two stops away; all other squares remain reachable by continuing to tab.
 - WebKit keyboard tests drive traversal the way Safari users do without full keyboard access (Option+Tab); plain-Tab behavior is Safari's own platform default, not an app defect.
+
+## Measuring whether learning sticks
+
+- The Learning Path now reports the three outcome measures the project judges itself by, each computed only from local records: **independent recall** (openings and pattern repairs completed without hints, with assisted completions counted separately), **delayed retention** (personal mistakes re-solved a day or more after capture), and **transfer** (verified patterns solved in unseen positions).
+- Each measure is shown as a plain fraction over raw counts — never a percentage dressed up as a rating — and each carries an honest empty state that explains how the evidence is produced, so a fresh profile shows "—" with guidance rather than a fabricated number.
 
 ## Not verified or intentionally not claimed
 

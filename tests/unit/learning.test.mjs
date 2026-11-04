@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildLearningProfile } from "../../dist/assets/core/learning/engine.js";
+import { buildLearningEvidence, buildLearningProfile } from "../../dist/assets/core/learning/engine.js";
 import { freshState, validateSave, themeIds } from "../../dist/assets/core/storage/db.js";
 import { freshSrs, review } from "../../dist/assets/core/srs/scheduler.js";
 
@@ -78,6 +78,39 @@ test("due personal blunders are recommended before unscheduled ones", () => {
   ];
   const tactics = buildLearningProfile(state, now).recommendations.find((item) => item.area === "tactics");
   assert.equal(tactics.key, "due");
+});
+
+test("learning evidence separates independent recall, delayed retention, and transfer", () => {
+  const DAY = 86_400_000;
+  const state = freshState();
+  state.blunders = [
+    { id: "own", fen: "6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1", bad: "Re2", best: "Re8#", solved: 1, starter: false, title: "own", timestamp: now - 5 * DAY },
+    { id: "starter", fen: "6k1/5ppp/8/8/8/8/5PPP/4R1K1 w - - 0 1", bad: "Re2", best: "Re8#", solved: 1, starter: true, title: "starter" },
+  ];
+  state.learning = [
+    attempt("openings", true, "italian"),                    // independent recall
+    attempt("openings", true, "french#assisted"),            // assisted recall
+    attempt("openings", false, "italian"),                   // unsuccessful recall
+    attempt("tactics", true, "own", now - 3 * DAY),          // delayed (>1d after capture), independent → retained
+    attempt("tactics", true, "own", now - 4.5 * DAY),        // only 12h after capture → not a retention test
+    attempt("tactics", false, "own#assisted", now - 2 * DAY),// delayed but assisted failure → delayed, not retained
+    attempt("tactics", true, "starter"),                     // starter blunder: recall, never retention
+    attempt("tactics", true, "transfer:fork"),               // transfer, independent
+    attempt("tactics", true, "transfer:fork#assisted"),      // transfer, assisted
+    attempt("tactics", false, "transfer:mate-one"),          // transfer, unsuccessful
+    attempt("visualization", true, "color:a1"),              // unrelated area → no measure
+  ];
+  const evidence = buildLearningEvidence(state, now);
+  assert.deepEqual(evidence.recall, { independent: 4, assisted: 1, unsuccessful: 2 });
+  assert.deepEqual(evidence.retention, { retained: 1, delayed: 2 });
+  assert.deepEqual(evidence.transfer, { transferred: 1, attempts: 3 });
+});
+
+test("learning evidence begins with honest zeros", () => {
+  const evidence = buildLearningEvidence(freshState(), now);
+  assert.deepEqual(evidence.recall, { independent: 0, assisted: 0, unsuccessful: 0 });
+  assert.deepEqual(evidence.retention, { retained: 0, delayed: 0 });
+  assert.deepEqual(evidence.transfer, { transferred: 0, attempts: 0 });
 });
 
 test("new opening events do not duplicate aggregate SRS evidence", () => {
