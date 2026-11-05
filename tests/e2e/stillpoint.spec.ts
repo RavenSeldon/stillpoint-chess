@@ -127,7 +127,7 @@ test("learning path records distinct practice attempts and opens a recommendatio
   await expect(page.getByRole("heading", { name: "Practice what matters next" })).toBeVisible();
   await expect(page.locator(".path-intro .metrics > div").first()).toContainText("2");
   await expect(page.locator(".activity-row")).toHaveCount(2);
-  await expect(page.locator(".activity-row").last()).toContainText("color:a1");
+  await expect(page.locator(".activity-row").last()).toContainText("Square Color · a1");
   await expect(page.locator(".skill-row").filter({ hasText: "Visualization" })).toContainText("Strength");
   await page.getByRole("button", { name: "Open visualization" }).click();
   await expect(page.getByRole("heading", { name: "Visualization Gym" })).toBeVisible();
@@ -347,8 +347,8 @@ test("Chinese lessons, larger text, reduced motion, and skip link persist access
   await page.locator("#guide-language").selectOption("zh");
   await expect(page.getByRole("heading", { name: "走出第一步，就已经开始了" })).toBeVisible();
   await expect(page.locator(".beginner-guide")).toHaveAttribute("lang", "zh-CN");
-  await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await page.locator('[data-view="settings"]').click();
   await expect(page.locator("#language-select")).toHaveValue("zh");
   await page.locator("#setting-large-text").check();
   await page.locator("#setting-reduce-motion").check();
@@ -369,17 +369,17 @@ test("Chinese lessons, larger text, reduced motion, and skip link persist access
     return state.settings?.language === "zh" && state.settings.largeText && state.settings.reduceMotion;
   })).toBe(true);
   await page.reload();
-  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  await page.locator('[data-view="settings"]').click();
   await expect(page.locator("#language-select")).toHaveValue("zh");
   await expect(page.locator("#setting-large-text")).toBeChecked();
   await expect(page.locator("#setting-reduce-motion")).toBeChecked();
 
-  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await page.locator('[data-view="play"]').click();
   await expect(page.getByRole("heading", { name: "走出第一步，就已经开始了" })).toBeVisible();
   const motion = await page.locator("main > *").first().evaluate((element) => getComputedStyle(element).animationName);
   expect(motion).toBe("none");
   await page.getByRole("button", { name: "试试 1. e4", exact: true }).click();
-  await expect(page.getByText(/Engine played/).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/引擎走出了/).first()).toBeVisible({ timeout: 30_000 });
   await expect(page.locator(".move-lesson").filter({ hasText: "e4：兵从 e2 到 e4" })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
   expect(overflow).toBe(false);
@@ -395,20 +395,20 @@ test("French and Dutch teaching persist and fit a mobile viewport", async ({ pag
   await page.locator("#guide-language").selectOption("fr");
   await expect(page.getByRole("heading", { name: "Votre premier coup suffit" })).toBeVisible();
   await expect(page.locator(".beginner-guide")).toHaveAttribute("lang", "fr");
-  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.locator("html")).toHaveAttribute("lang", "fr");
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
 
-  await page.getByRole("button", { name: "Blunder Bank" }).click();
-  await page.getByRole("button", { name: "Reveal & explain" }).click();
+  await page.locator('[data-view="blunders"]').click();
+  await page.locator("#blunder-hint").click();
   await expect(page.locator(".move-purpose")).toContainText("La dame rejoint h4 par la diagonale");
 
-  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  await page.locator('[data-view="settings"]').click();
   await page.locator("#language-select").selectOption("nl");
-  await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  await page.getByRole("button", { name: "Blunder Bank" }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "nl");
+  await page.locator('[data-view="blunders"]').click();
   await expect(page.locator(".move-purpose")).toContainText("De dame gaat via de diagonaal naar h4");
 
-  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  await page.locator('[data-view="settings"]').click();
   await expect(page.locator("#language-select")).toHaveValue("nl");
   await expect.poll(() => page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -425,12 +425,12 @@ test("French and Dutch teaching persist and fit a mobile viewport", async ({ pag
     return state.settings?.language === "nl";
   })).toBe(true);
   await page.reload();
-  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  await page.locator('[data-view="settings"]').click();
   await expect(page.locator("#language-select")).toHaveValue("nl");
-  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await page.locator('[data-view="play"]').click();
   await expect(page.getByRole("heading", { name: "Je eerste zet is genoeg" })).toBeVisible();
   await expect(page.locator(".beginner-guide")).toHaveAttribute("lang", "nl");
-  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.locator("html")).toHaveAttribute("lang", "nl");
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
 });
 
@@ -541,21 +541,22 @@ test("Learning Path measures independent recall, retention, and transfer honestl
   await expect(page.getByText(/used a hint and is counted separately/)).toBeVisible();
 });
 
-test("language switching is visibly effective where it is changed", async ({ page }) => {
+test("language switching translates the full interface and training content", async ({ page }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "Data & Privacy" }).click();
+  await page.locator('[data-view="settings"]').click();
 
-  // Regression: switching here once changed zero visible text on this screen.
   const preview = page.locator(".language-preview");
   await expect(preview).toHaveAttribute("lang", "en");
   await expect(preview).toContainText("Your first move is enough");
   await page.locator("#language-select").selectOption("zh");
   await expect(preview).toHaveAttribute("lang", "zh-CN");
   await expect(preview).toContainText("走出第一步，就已经开始了");
-  await expect(page.locator("main")).toContainText("覆盖首局引导");
+  await expect(page.locator("main")).toContainText("语言选择覆盖完整界面、训练内容、反馈与无障碍标签");
   await expect(page.locator("#live")).toContainText("简体中文");
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
 
-  // And the choice still reaches the places the scope note promises.
-  await page.getByRole("button", { name: "Play", exact: true }).click();
+  await page.locator('[data-view="play"]').click();
   await expect(page.getByRole("heading", { name: "走出第一步，就已经开始了" })).toBeVisible();
+  await expect(page.locator(".board-topline")).toContainText("你 · 白方");
+  await expect(page.locator(".board-topline")).toContainText("禅 / 无时钟");
 });

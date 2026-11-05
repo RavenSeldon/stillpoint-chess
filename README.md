@@ -29,7 +29,7 @@ The deployable static site is generated in `dist/`. Do not open it through `file
 - **Today:** a calm home view with one primary next step, an explainable recommendation from existing learning history, weekly activity and review counts, free practice, and direct resumption of an unfinished board. Recent practice recovery still opens the board directly.
 - **Learning Path:** four actionable recommendations, seven practice-readiness signals, relative strengths and growth edges, recent trends, evidence labels, and an activity trail. Every recommendation opens a real local exercise.
 - **Four complete themes:** Indigo Focus, Lavender Paper, Forest Quiet, and Ember Study, each with coordinated navigation, panels, controls, and board colors. Legacy light/dark preferences migrate automatically.
-- **Language and reading access:** English by default, with Simplified Chinese, French, and Dutch for the first-game guide, generated move lessons, and starter Blunder Bank lessons; persistent larger-text and reduced-motion options; a keyboard skip link; decorative navigation icons hidden from assistive technology. The wider interface and authored opening/master notes remain English.
+- **Language and reading access:** English by default, with complete Simplified Chinese, French, and Dutch localization across navigation, settings, course content, dynamic feedback, dialogs, and accessibility labels; persistent larger-text and reduced-motion options; a keyboard skip link; decorative navigation icons hidden from assistive technology. Chess notation, player names, and the Stillpoint name remain unchanged.
 - **Modern visual system:** locally bundled scalable Cburnett SVG pieces, clear selection/capture states, last-move highlights, short moved-piece glides, gentle view/theme transitions, tactile controls, reduced-motion support, and responsive navigation that centers the active mobile tab.
 - **Real local engine:** Stockfish 19 Lite, single-threaded JS/WASM, running in a Web Worker. Six bounded difficulty tiers are descriptive presets, not calibrated Elo ratings.
 - **Coach and review:** pre-/post-move Stockfish comparison, mover-perspective normalization, typed mate scores, estimated win-probability loss, move classifications, preferred-move arrows, an evaluation trace for reviewed moves, and practice from the largest turning points.
@@ -88,7 +88,7 @@ Browser tests exercise the production build, not only the development server. Se
 
 - Learning Path scores are explainable practice-readiness heuristics based on local outcomes, recency, and a neutral prior. They are not Elo estimates, diagnoses, or predictions; sparse histories remain explicitly low-confidence.
 - Generated move lessons describe legal, observable facts; authored lessons supply strategic purposes. Stockfish preferences remain search evidence, not reconstructed human intent or a complete strategic explanation.
-- Simplified Chinese, French, and Dutch localization covers the first-game guide, generated move lessons, and starter Blunder Bank lessons. These are teaching-layer translations, not a complete interface or course translation.
+- Simplified Chinese, French, and Dutch localization is bundled locally and covers the complete interface and training content. It does not require a runtime translation service; chess notation and historical player names intentionally stay unchanged.
 - The Opening Dojo is a starter repertoire, not an exhaustive opening tree.
 - “Visualize the Sequence” currently trains legal opening recall; its positions are not advertised as uniquely verified tactical puzzles.
 - Endgame drills use actual outcomes and stated practice goals, not theoretical WDL labels or tablebase adjudication.
@@ -107,8 +107,8 @@ Browser tests exercise the production build, not only the development server. Se
 - `src/core/learning/languages.ts`: shared language IDs, native option names, onboarding copy, coach phrasing, and translated starter lessons.
 - `src/core/learning/explanations.ts`: legal move decoding and observable teaching facts in English, Simplified Chinese, French, and Dutch.
 - `src/core/eval`, `src/core/srs`, `src/core/storage`: evaluation math, memory schedule, learning-history and preference validation, and local persistence.
-- `src/data`: opening, calculation, endgame, and classical-game content with legality and explanation-coverage tests.
-- `src/ui`: accessible custom board, Learning Path, training views, optional guidance, and four persistent themes.
+- `src/data`: opening, calculation, endgame, and classical-game content with legality and explanation-coverage tests; `src/data/locales` holds the translated course dictionaries.
+- `src/ui`: accessible custom board, Learning Path, training views, optional guidance, and four persistent themes; `src/ui/localization.ts` and `src/ui/locales` translate full renders, subsequent DOM updates, composed feedback, and accessibility attributes.
 - `scripts/package.mjs`: content-hashed, release-versioned offline precache generation.
 
 No account, analytics, remote chess API, runtime CDN, or third-party cookie is used. Normal requests to the static host still occur when online.

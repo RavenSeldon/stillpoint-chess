@@ -42,6 +42,7 @@ import {
 } from "../data/content.js";
 import { classifyPattern, patternLabels } from "../core/learning/patterns.js";
 import { BoardView, type BlindTier } from "./board.js";
+import { SiteLocalizer, rememberLanguage, translateText } from "./localization.js";
 const esc = (s: unknown) =>
   String(s).replace(
     /[&<>"']/g,
@@ -117,6 +118,7 @@ export class App {
   private db = new LocalDatabase();
   private state: SaveState = freshState();
   private engine = new OfflineEngineAdapter();
+  private localizer = new SiteLocalizer(() => this.state.settings.language);
   private view = "today";
   private game = new Chess();
   private board: BoardView | null = null;
@@ -209,6 +211,8 @@ export class App {
     validateContent();
     await this.db.open();
     this.state = await this.db.read();
+    rememberLanguage(this.state.settings.language);
+    this.localizer.start();
     if (!this.state.seededStarter) {
       this.state.blunders = starterBlunders();
       this.state.seededStarter = true;
@@ -279,6 +283,7 @@ export class App {
       this.savePracticeRecovery();
       this.stopClock();
       this.stopGymInterval();
+      this.localizer.stop();
       this.engine.destroy();
       this.db.close();
     });
@@ -291,7 +296,10 @@ export class App {
   private announce(text: string) {
     this.announcements = text;
     const live = $("live");
-    if (live) live.textContent = text;
+    if (live) live.textContent = translateText(text, this.state.settings.language);
+  }
+  private confirm(text: string) {
+    return globalThis.confirm(translateText(text, this.state.settings.language));
   }
   private async save() {
     await this.db.write(this.state);
@@ -487,6 +495,7 @@ export class App {
   private setLessonLanguage(value: string) {
     if (!lessonLanguages.includes(value as LessonLanguage)) return;
     this.state.settings.language = value as LessonLanguage;
+    rememberLanguage(this.state.settings.language);
     this.saveSoon();
     this.announce(`${languageNames[this.state.settings.language]} · ${guideCopy[this.state.settings.language].title}`);
     this.render();
@@ -524,8 +533,7 @@ export class App {
     document.body.dataset.theme = settings.theme;
     document.body.dataset.textSize = settings.largeText ? "large" : "standard";
     document.body.dataset.motion = settings.reduceMotion ? "reduce" : "system";
-    // The interface is English; only translated lesson sections carry their own lang tag.
-    document.documentElement.lang = "en";
+    document.documentElement.lang = languageTags[settings.language];
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColors[settings.theme]);
   }
   private render() {
@@ -580,6 +588,7 @@ export class App {
     // Re-rendering replaces the DOM; hand keyboard focus back to the control it was on.
     if (restoreId) $(restoreId)?.focus();
     else if (restoreSquare) this.root.querySelector<HTMLElement>(`[data-square="${restoreSquare}"]`)?.focus();
+    this.localizer.apply();
   }
   private renderMain() {
     switch (this.view) {
@@ -649,6 +658,27 @@ export class App {
       }
     });
   }
+  private activityLabel(key: string) {
+    const separator = key.indexOf(":");
+    const namespace = separator < 0 ? "" : key.slice(0, separator);
+    const detail = separator < 0 ? "" : key.slice(separator + 1);
+    if (namespace === "coordinate") return `Coordinate Blitz · ${detail}`;
+    if (namespace === "color") return `Square Color · ${detail}`;
+    if (namespace === "knight") return `Knight Path · ${detail.replace("-", "–")}`;
+    if (namespace === "transfer") return `Transfer test · ${patternLabels[detail as keyof typeof patternLabels] || detail}`;
+    const opening = openings.find((item) => item.id === key);
+    if (opening) return `Opening · ${opening.title}`;
+    const calculation = calculations.find((item) => item.id === key);
+    if (calculation) return `Calculation · ${calculation.intro}`;
+    const endgame = endgames.find((item) => item.id === key);
+    if (endgame) return `Endgames · ${endgame.title}`;
+    const master = masters.find((item) => item.id === namespace);
+    if (master) return `Master game · ${master.title}`;
+    const blunder = this.state.blunders.find((item) => item.id === key);
+    if (blunder) return `Blunder Bank · ${blunder.title}`;
+    return key;
+  }
+
   private pathHtml() {
     const profile = buildLearningProfile(this.state);
     const insight = profile.growthEdge
@@ -665,7 +695,7 @@ export class App {
       const skill = profile.skills.find((item) => item.id === attempt.area)!;
       const assisted = attempt.key.endsWith("#assisted");
       const keyLabel = assisted ? attempt.key.slice(0, -"#assisted".length) : attempt.key;
-      return `<div class="activity-row"><span><b>${esc(skill.label)}</b><small>${esc(keyLabel)}</small></span><span class="activity-result ${attempt.correct ? "positive" : ""}">${assisted ? "Assisted" : attempt.correct ? "Completed" : "Review"} · ${when}</span></div>`;
+      return `<div class="activity-row"><span><b>${esc(skill.label)}</b><small>${esc(this.activityLabel(keyLabel))}</small></span><span class="activity-result ${attempt.correct ? "positive" : ""}">${assisted ? "Assisted" : attempt.correct ? "Completed" : "Review"} · ${when}</span></div>`;
     }).join("") : `<p class="helper">Your completed exercises will appear here. Nothing leaves this device.</p>`;
     return `<div class="workspace-heading"><div><span class="overline">YOUR LEARNING PATH</span><h1>Practice what matters next</h1><p>A changing plan shaped by your games, recall, mistakes, and training history.</p></div><span class="current-mode">LOCAL & EXPLAINABLE <span class="status-dot"></span></span></div>
       <div class="path-overview"><section class="panel path-intro"><span class="overline">A LIVING PRACTICE</span><h2>${profile.recordedAttempts ? "Your path is adapting" : "Begin with a gentle baseline"}</h2><p>${insight}</p><div class="metrics wide"><div><b>${profile.recentAttempts}</b><small>Attempts · 7 days</small></div><div><b>${this.state.games.filter((game) => !game.mode || game.mode === "play").length}</b><small>Practice games</small></div><div><b>${Object.values(this.state.srs).filter((item) => due(item)).length}</b><small>Lines due</small></div></div></section>
@@ -1182,7 +1212,7 @@ export class App {
     });
     this.bind("resign", () => {
       if (this.gameResult || this.game.history.length === 0) return;
-      if (confirm("Resign this game?")) {
+      if (this.confirm("Resign this game?")) {
         this.gameResult = this.player === "w" ? "0-1" : "1-0";
         this.finishGame("You resigned");
         this.render();
@@ -1411,7 +1441,7 @@ export class App {
       if (input) this.openingTryMove(input.value);
     });
     this.bind("reset-opening", () => {
-      if (!confirm("Reset mastery progress for this opening?")) return;
+      if (!this.confirm("Reset mastery progress for this opening?")) return;
       delete this.state.srs[line.id];
       this.saveSoon();
       this.render();
@@ -2085,7 +2115,7 @@ export class App {
       this.render();
     });
     this.bind("blunder-delete", () => {
-      if (!confirm("Delete this blunder record?")) return;
+      if (!this.confirm("Delete this blunder record?")) return;
       this.state.blunders = this.state.blunders.filter((p) => p.id !== b.id);
       this.blunderId = this.state.blunders[0]?.id || "";
       this.blunderFeedback = "";
@@ -2278,7 +2308,7 @@ export class App {
         try {
           if (file.size > 5_000_000) throw Error("Backup exceeds 5 MB");
           const imported = validateSave(JSON.parse(await file.text()));
-          const method = confirm(
+          const method = this.confirm(
             "Import as MERGE? Select Cancel to choose overwrite or abort.",
           );
           let next: SaveState;
@@ -2300,7 +2330,7 @@ export class App {
             };
           } else {
             if (
-              !confirm(
+              !this.confirm(
                 "Overwrite all current progress with this backup? Cancel to abort.",
               )
             )
@@ -2346,10 +2376,10 @@ export class App {
         this.render();
       };
     this.bind("clear-data", async () => {
-      if (!confirm("First confirmation: clear ALL local chess progress?"))
+      if (!this.confirm("First confirmation: clear ALL local chess progress?"))
         return;
       if (
-        !confirm(
+        !this.confirm(
           "Final confirmation: this action cannot be undone without a backup. Continue?",
         )
       )
